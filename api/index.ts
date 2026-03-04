@@ -43,7 +43,12 @@ app.post("/api/login", async (req, res) => {
       .eq('username', username)
       .single();
 
-    if (error || !dbUser || !bcrypt.compareSync(password, dbUser.password)) {
+    if (error) {
+      console.error("Supabase Login Error:", error);
+      return res.status(error.code === 'PGRST116' ? 401 : 500).json({ error: error.message });
+    }
+
+    if (!dbUser || !bcrypt.compareSync(password, dbUser.password)) {
       return res.status(401).json({ error: "Sai tài khoản hoặc mật khẩu" });
     }
 
