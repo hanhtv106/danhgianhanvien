@@ -37,33 +37,34 @@ const authenticate = (req: any, res: any, next: any) => {
 app.post("/api/login", async (req, res) => {
   const { username, password } = req.body;
   try {
-    const { data: dbUser, error } = await supabase
+    // Fetch user with role_id and permissions
+    const { data: userData, error: userError } = await supabase
       .from('users')
-      .select('*')
+      .select('*, roles(id, name, role_permissions(permissions(name)))')
       .eq('username', username)
       .single();
 
-    if (error) {
-      console.error("Supabase Login Error:", error);
-      return res.status(error.code === 'PGRST116' ? 401 : 500).json({ error: error.message });
-    }
-
-    if (!dbUser || !bcrypt.compareSync(password, dbUser.password)) {
+    if (userError || !userData || !bcrypt.compareSync(password, userData.password)) {
       return res.status(401).json({ error: "Sai tài khoản hoặc mật khẩu" });
     }
 
+    // Process permissions into a simple array of strings ['module:action', ...]
+    const permissions = userData.roles?.role_permissions?.map((rp: any) => rp.permissions?.name).filter(Boolean) || [];
+
     const user = {
-      id: dbUser.id,
-      username: dbUser.username,
-      role: dbUser.role,
-      full_name: dbUser.full_name,
-      department_id: dbUser.department_id,
-      branch_id: dbUser.branch_id
+      id: userData.id,
+      username: userData.username,
+      role: userData.roles?.name || userData.role, // Use role from roles table if possible
+      full_name: userData.full_name,
+      department_id: userData.department_id,
+      branch_id: userData.branch_id,
+      permissions: permissions
     };
 
     const token = jwt.sign(user, JWT_SECRET);
     res.json({ token, user });
   } catch (err) {
+    console.error("Login route error:", err);
     res.status(500).json({ error: "Lỗi đăng nhập" });
   }
 });
@@ -105,17 +106,11 @@ app.get("/api/users", authenticate, async (req, res) => {
 });
 
 app.post("/api/users", authenticate, async (req, res) => {
-  const { username, password, full_name, role, department_id, branch_id } = req.body;
+  const { username, password, full_name, role, role_id, department_id, branch_id } = req.body;
   const hashedPassword = bcrypt.hashSync(password, 10);
   try {
-    if (role === 'MANAGER' && department_id) {
-      const { data: check } = await supabase.from('users').select('id').eq('role', 'MANAGER').eq('department_id', department_id);
-      if (check && check.length > 0) {
-        return res.status(400).json({ error: "Phòng ban này đã có trưởng phòng" });
-      }
-    }
     const { data, error } = await supabase.from('users').insert({
-      username, password: hashedPassword, full_name, role,
+      username, password: hashedPassword, full_name, role, role_id,
       department_id: department_id || null,
       branch_id: branch_id || null
     }).select('id').single();
@@ -128,10 +123,10 @@ app.post("/api/users", authenticate, async (req, res) => {
 });
 
 app.put("/api/users/:id", authenticate, async (req, res) => {
-  const { username, password, full_name, role, department_id, branch_id } = req.body;
+  const { username, password, full_name, role, role_id, department_id, branch_id } = req.body;
   const { id } = req.params;
   try {
-    const updates: any = { username, full_name, role, department_id: department_id || null, branch_id: branch_id || null };
+    const updates: any = { username, full_name, role, role_id, department_id: department_id || null, branch_id: branch_id || null };
     if (password) updates.password = bcrypt.hashSync(password, 10);
 
     const { error } = await supabase.from('users').update(updates).eq('id', id);
@@ -451,6 +446,39 @@ app.get("/api/reports/employee/:id", authenticate, async (req, res) => {
 
     res.json({ employee, evaluations: evaluationsRows });
   } catch (err) { res.status(500).json({ error: "Lỗi chi tiết nhân viên" }); }
+});
+
+// RBAC Management
+app.get("/api/roles", authenticate, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('roles').select('*, role_permissions(permission_id)');
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: "Lỗi lấy danh sách vai trò" }); }
+});
+
+app.get("/api/permissions", authenticate, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('permissions').select('*').order('module').order('action');
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: "Lỗi lấy danh sách quyền" }); }
+});
+
+app.post("/api/roles/:id/permissions", authenticate, async (req, res) => {
+  const roleId = req.params.id;
+  const { permissionIds } = req.body; // Array of IDs
+  try {
+    // Delete old
+    await supabase.from('role_permissions').delete().eq('role_id', roleId);
+    // Insert new
+    if (permissionIds && permissionIds.length > 0) {
+      const inserts = permissionIds.map((pid: number) => ({ role_id: parseInt(roleId), permission_id: pid }));
+      const { error } = await supabase.from('role_permissions').insert(inserts);
+      if (error) throw error;
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: "Lỗi cập nhật quyền hạn" }); }
 });
 
 export default app;

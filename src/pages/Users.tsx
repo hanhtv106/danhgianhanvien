@@ -9,24 +9,32 @@ export default function UsersPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [roles, setRoles] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     username: '',
     password: '',
     full_name: '',
-    role: 'MANAGER',
+    role_id: '',
+    role: 'USER',
     department_id: '',
     branch_id: ''
   });
 
   const fetchData = async () => {
-    const [userData, deptData, branchData] = await Promise.all([
-      apiFetch('/api/users'),
-      apiFetch('/api/departments'),
-      apiFetch('/api/branches')
-    ]);
-    setUsers(userData);
-    setDepartments(deptData);
-    setBranches(branchData);
+    try {
+      const [userData, deptData, branchData, rolesData] = await Promise.all([
+        apiFetch('/api/users'),
+        apiFetch('/api/departments'),
+        apiFetch('/api/branches'),
+        apiFetch('/api/roles')
+      ]);
+      setUsers(userData);
+      setDepartments(deptData);
+      setBranches(branchData);
+      setRoles(rolesData || []);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   useEffect(() => {
@@ -38,9 +46,10 @@ export default function UsersPage() {
       setEditingUser(user);
       setFormData({
         username: user.username,
-        password: '', // Don't show password
+        password: '',
         full_name: user.full_name,
         role: user.role,
+        role_id: (user as any).role_id?.toString() || '',
         department_id: user.department_id?.toString() || '',
         branch_id: user.branch_id?.toString() || ''
       });
@@ -50,7 +59,8 @@ export default function UsersPage() {
         username: '',
         password: '',
         full_name: '',
-        role: 'MANAGER',
+        role: 'USER',
+        role_id: roles.find(r => r.name === 'USER')?.id?.toString() || '',
         department_id: '',
         branch_id: ''
       });
@@ -122,7 +132,7 @@ export default function UsersPage() {
                   <td className="px-6 py-4 text-sm font-medium text-slate-900">{user.full_name}</td>
                   <td className="px-6 py-4 text-sm">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${user.role === 'SUPER_ADMIN' ? 'bg-purple-50 text-purple-600' :
-                        user.role === 'ADMIN' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'
+                      user.role === 'ADMIN' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'
                       }`}>
                       {user.role === 'SUPER_ADMIN' ? 'Quản trị' : user.role === 'ADMIN' ? 'Admin' : 'User'}
                     </span>
@@ -186,13 +196,22 @@ export default function UsersPage() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Vai trò</label>
                 <select
-                  value={formData.role}
-                  onChange={e => setFormData({ ...formData, role: e.target.value as any, department_id: e.target.value === 'SUPER_ADMIN' ? '' : formData.department_id, branch_id: e.target.value === 'SUPER_ADMIN' ? '' : formData.branch_id })}
+                  value={formData.role_id}
+                  onChange={e => {
+                    const selectedRole = roles.find(r => r.id.toString() === e.target.value);
+                    setFormData({
+                      ...formData,
+                      role_id: e.target.value,
+                      role: selectedRole?.name || 'USER',
+                      department_id: selectedRole?.name === 'SUPER_ADMIN' ? '' : formData.department_id,
+                      branch_id: selectedRole?.name === 'SUPER_ADMIN' ? '' : formData.branch_id
+                    });
+                  }}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                  required
                 >
-                  <option value="USER">User</option>
-                  <option value="ADMIN">Admin</option>
-                  <option value="SUPER_ADMIN">Quản trị</option>
+                  <option value="">-- Chọn vai trò --</option>
+                  {roles.map(r => <option key={r.id} value={r.id}>{r.name === 'SUPER_ADMIN' ? 'Quản trị' : r.name === 'ADMIN' ? 'Admin' : 'User'}</option>)}
                 </select>
               </div>
               {formData.role !== 'SUPER_ADMIN' && (

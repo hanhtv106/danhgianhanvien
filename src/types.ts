@@ -5,6 +5,7 @@ export interface User {
   role: 'SUPER_ADMIN' | 'ADMIN' | 'USER';
   department_id?: number;
   branch_id?: number;
+  permissions?: string[];
 }
 
 export interface Branch {
