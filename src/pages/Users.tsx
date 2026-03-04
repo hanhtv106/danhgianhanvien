@@ -203,8 +203,8 @@ export default function UsersPage() {
                       ...formData,
                       role_id: e.target.value,
                       role: selectedRole?.name || 'USER',
-                      department_id: selectedRole?.name === 'SUPER_ADMIN' ? '' : formData.department_id,
-                      branch_id: selectedRole?.name === 'SUPER_ADMIN' ? '' : formData.branch_id
+                      department_id: (selectedRole?.name === 'SUPER_ADMIN' || selectedRole?.name === 'ADMIN') ? '' : formData.department_id,
+                      branch_id: (selectedRole?.name === 'SUPER_ADMIN' || selectedRole?.name === 'ADMIN') ? '' : formData.branch_id
                     });
                   }}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
@@ -214,7 +214,7 @@ export default function UsersPage() {
                   {roles.map(r => <option key={r.id} value={r.id}>{r.name === 'SUPER_ADMIN' ? 'Quản trị' : r.name === 'ADMIN' ? 'Admin' : 'User'}</option>)}
                 </select>
               </div>
-              {formData.role !== 'SUPER_ADMIN' && (
+              {formData.role === 'USER' && (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Chi nhánh</label>

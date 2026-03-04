@@ -90,7 +90,7 @@ app.get("/api/users", authenticate, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, full_name, role, department_id, branch_id, departments(name), branches(name)');
+      .select('id, username, full_name, role, role_id, department_id, branch_id, departments(name), branches(name)');
 
     if (error) throw error;
 

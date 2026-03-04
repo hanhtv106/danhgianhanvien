@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   Lock,
+  Shield,
   MapPin,
   AlertCircle,
   Eye,
@@ -49,6 +50,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
     { icon: Building2, label: 'Phòng ban', path: 'departments', roles: ['SUPER_ADMIN', 'ADMIN'] },
     { icon: Star, label: 'Lý do sao', path: 'reasons', roles: ['SUPER_ADMIN', 'ADMIN'] },
     { icon: Users, label: 'Người dùng', path: 'users', roles: ['SUPER_ADMIN'] },
+    { icon: Shield, label: 'Phân quyền', path: 'permissions', roles: ['SUPER_ADMIN'] },
   ];
 
   const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));

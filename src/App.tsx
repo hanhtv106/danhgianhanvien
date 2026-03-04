@@ -8,6 +8,7 @@ import Departments from './pages/Departments';
 import Reasons from './pages/Reasons';
 import UsersPage from './pages/Users';
 import Branches from './pages/Branches';
+import Permissions from './pages/Permissions';
 import { User } from './types';
 
 export default function App() {
@@ -56,6 +57,7 @@ export default function App() {
       {activeTab === 'departments' && (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') && <Departments />}
       {activeTab === 'reasons' && (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') && <Reasons />}
       {activeTab === 'users' && user.role === 'SUPER_ADMIN' && <UsersPage />}
+      {activeTab === 'permissions' && user.role === 'SUPER_ADMIN' && <Permissions />}
     </Layout>
   );
 }
