@@ -1,0 +1,235 @@
+import React, { useState, useEffect } from 'react';
+import { Plus, Trash2, Edit2, User as UserIcon, Shield, MapPin } from 'lucide-react';
+import { apiFetch } from '../services/api';
+import { User, Department, Branch } from '../types';
+
+export default function UsersPage() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [formData, setFormData] = useState({
+    username: '',
+    password: '',
+    full_name: '',
+    role: 'MANAGER',
+    department_id: '',
+    branch_id: ''
+  });
+
+  const fetchData = async () => {
+    const [userData, deptData, branchData] = await Promise.all([
+      apiFetch('/api/users'),
+      apiFetch('/api/departments'),
+      apiFetch('/api/branches')
+    ]);
+    setUsers(userData);
+    setDepartments(deptData);
+    setBranches(branchData);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleOpenModal = (user?: User) => {
+    if (user) {
+      setEditingUser(user);
+      setFormData({
+        username: user.username,
+        password: '', // Don't show password
+        full_name: user.full_name,
+        role: user.role,
+        department_id: user.department_id?.toString() || '',
+        branch_id: user.branch_id?.toString() || ''
+      });
+    } else {
+      setEditingUser(null);
+      setFormData({
+        username: '',
+        password: '',
+        full_name: '',
+        role: 'MANAGER',
+        department_id: '',
+        branch_id: ''
+      });
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users';
+    const method = editingUser ? 'PUT' : 'POST';
+    
+    try {
+      await apiFetch(url, {
+        method,
+        body: JSON.stringify(formData),
+      });
+      setIsModalOpen(false);
+      fetchData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (confirm('Bạn có chắc chắn muốn xóa tài khoản này?')) {
+      try {
+        await apiFetch(`/api/users/${id}`, { method: 'DELETE' });
+        fetchData();
+      } catch (err: any) {
+        alert(err.message);
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Quản lý Tài khoản</h2>
+          <p className="text-slate-500">Quản trị viên và Trưởng phòng đăng nhập hệ thống</p>
+        </div>
+        <button 
+          onClick={() => handleOpenModal()}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
+        >
+          <Plus size={18} />
+          <span>Thêm tài khoản</span>
+        </button>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="px-6 py-4 text-sm font-semibold text-slate-700">Tên đăng nhập</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-700">Họ tên</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-700">Vai trò</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-700">Chi nhánh</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-700">Phòng ban</th>
+                <th className="px-6 py-4 text-sm font-semibold text-slate-700 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {users.map((user) => (
+                <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-4 text-sm text-slate-600 font-mono">{user.username}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-slate-900">{user.full_name}</td>
+                  <td className="px-6 py-4 text-sm">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                      user.role === 'ADMIN' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
+                    }`}>
+                      {user.role === 'ADMIN' ? 'Quản trị viên' : 'Trưởng phòng'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{(user as any).branch_name || '-'}</td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{(user as any).department_name || '-'}</td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button onClick={() => handleOpenModal(user)} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors">
+                        <Edit2 size={18} />
+                      </button>
+                      <button onClick={() => handleDelete(user.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors">
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl w-full max-w-md p-8 shadow-2xl">
+            <h3 className="text-xl font-bold mb-6">{editingUser ? 'Sửa tài khoản' : 'Thêm tài khoản mới'}</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Tên đăng nhập</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.username}
+                  onChange={e => setFormData({...formData, username: e.target.value})}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Mật khẩu {editingUser && '(Để trống nếu không đổi)'}
+                </label>
+                <input
+                  type="password"
+                  required={!editingUser}
+                  value={formData.password}
+                  onChange={e => setFormData({...formData, password: e.target.value})}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Họ tên</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.full_name}
+                  onChange={e => setFormData({...formData, full_name: e.target.value})}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Vai trò</label>
+                <select
+                  value={formData.role}
+                  onChange={e => setFormData({...formData, role: e.target.value as any, department_id: e.target.value === 'ADMIN' ? '' : formData.department_id, branch_id: e.target.value === 'ADMIN' ? '' : formData.branch_id})}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                >
+                  <option value="MANAGER">Trưởng phòng</option>
+                  <option value="ADMIN">Quản trị viên</option>
+                </select>
+              </div>
+              {formData.role === 'MANAGER' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Chi nhánh</label>
+                    <select
+                      value={formData.branch_id}
+                      onChange={e => setFormData({...formData, branch_id: e.target.value})}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                      required
+                    >
+                      <option value="">-- Chọn chi nhánh --</option>
+                      {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Phòng ban quản lý</label>
+                    <select
+                      value={formData.department_id}
+                      onChange={e => setFormData({...formData, department_id: e.target.value})}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                      required
+                    >
+                      <option value="">-- Chọn phòng ban --</option>
+                      {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-end gap-3 mt-8">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2 text-slate-600 hover:bg-slate-50 rounded-xl transition-colors">Hủy</button>
+                <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors">Lưu</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

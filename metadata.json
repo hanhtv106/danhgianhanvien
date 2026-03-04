@@ -1,0 +1,5 @@
+{
+  "name": "Hệ thống Đánh giá Nhân viên",
+  "description": "Ứng dụng quản lý và đánh giá nhân viên bằng hệ thống sao, hỗ trợ phân quyền và báo cáo.",
+  "requestFramePermissions": []
+}
