@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, 
+import {
+  Users,
   User as UserIcon,
-  Building2, 
-  Briefcase, 
-  Star, 
-  BarChart3, 
-  LogOut, 
-  ChevronLeft, 
+  Building2,
+  Briefcase,
+  Star,
+  BarChart3,
+  LogOut,
+  ChevronLeft,
   ChevronRight,
   Menu,
   X,
@@ -42,13 +42,13 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const menuItems = [
-    { icon: Star, label: 'Đánh giá', path: 'evaluation', roles: ['ADMIN', 'MANAGER'] },
-    { icon: BarChart3, label: 'Báo cáo', path: 'reports', roles: ['ADMIN', 'MANAGER'] },
-    { icon: Users, label: 'Nhân viên', path: 'employees', roles: ['ADMIN'] },
-    { icon: MapPin, label: 'Chi nhánh', path: 'branches', roles: ['ADMIN'] },
-    { icon: Building2, label: 'Phòng ban', path: 'departments', roles: ['ADMIN'] },
-    { icon: Star, label: 'Lý do sao', path: 'reasons', roles: ['ADMIN'] },
-    { icon: Users, label: 'Người dùng', path: 'users', roles: ['ADMIN'] },
+    { icon: Star, label: 'Đánh giá', path: 'evaluation', roles: ['SUPER_ADMIN', 'ADMIN', 'USER'] },
+    { icon: BarChart3, label: 'Báo cáo', path: 'reports', roles: ['SUPER_ADMIN', 'ADMIN', 'USER'] },
+    { icon: Users, label: 'Nhân viên', path: 'employees', roles: ['SUPER_ADMIN', 'ADMIN'] },
+    { icon: MapPin, label: 'Chi nhánh', path: 'branches', roles: ['SUPER_ADMIN'] },
+    { icon: Building2, label: 'Phòng ban', path: 'departments', roles: ['SUPER_ADMIN', 'ADMIN'] },
+    { icon: Star, label: 'Lý do sao', path: 'reasons', roles: ['SUPER_ADMIN', 'ADMIN'] },
+    { icon: Users, label: 'Người dùng', path: 'users', roles: ['SUPER_ADMIN'] },
   ];
 
   const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));
@@ -106,8 +106,8 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
               onClick={() => setActiveTab(item.path)}
               className={cn(
                 "w-full flex items-center p-3 rounded-xl transition-colors",
-                activeTab === item.path 
-                  ? "bg-indigo-50 text-indigo-600" 
+                activeTab === item.path
+                  ? "bg-indigo-50 text-indigo-600"
                   : "text-slate-600 hover:bg-slate-50"
               )}
             >
@@ -123,7 +123,9 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
               {isSidebarOpen && (
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-900 truncate">{user.full_name}</p>
-                  <p className="text-xs text-slate-500 truncate">{user.role === 'ADMIN' ? 'Quản trị viên' : 'Trưởng phòng'}</p>
+                  <p className="text-xs text-slate-500 truncate">
+                    {user.role === 'SUPER_ADMIN' ? 'Quản trị' : user.role === 'ADMIN' ? 'Admin' : 'User'}
+                  </p>
                 </div>
               )}
               <button onClick={onLogout} className="p-2 text-slate-400 hover:text-red-500 transition-colors" title="Đăng xuất">
@@ -131,7 +133,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
               </button>
             </div>
             {isSidebarOpen && (
-              <button 
+              <button
                 onClick={() => setShowChangePassword(true)}
                 className="flex items-center px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
               >
@@ -145,7 +147,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
 
       {/* Mobile Menu */}
       <div className="md:hidden">
-        <button 
+        <button
           onClick={() => setIsMobileMenuOpen(true)}
           className="fixed top-4 left-4 z-20 p-2 bg-white rounded-lg shadow-md"
         >
@@ -172,8 +174,8 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                     }}
                     className={cn(
                       "w-full flex items-center p-3 rounded-xl transition-colors",
-                      activeTab === item.path 
-                        ? "bg-indigo-50 text-indigo-600" 
+                      activeTab === item.path
+                        ? "bg-indigo-50 text-indigo-600"
                         : "text-slate-600 hover:bg-slate-50"
                     )}
                   >
@@ -183,7 +185,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                 ))}
               </nav>
               <div className="p-6 border-t space-y-2">
-                <button 
+                <button
                   onClick={() => {
                     setIsMobileMenuOpen(false);
                     setShowChangePassword(true);

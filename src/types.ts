@@ -2,7 +2,7 @@ export interface User {
   id: number;
   username: string;
   full_name: string;
-  role: 'ADMIN' | 'MANAGER';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'USER';
   department_id?: number;
   branch_id?: number;
 }

@@ -62,7 +62,7 @@ export default function UsersPage() {
     e.preventDefault();
     const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users';
     const method = editingUser ? 'PUT' : 'POST';
-    
+
     try {
       await apiFetch(url, {
         method,
@@ -93,7 +93,7 @@ export default function UsersPage() {
           <h2 className="text-2xl font-bold text-slate-900">Quản lý Tài khoản</h2>
           <p className="text-slate-500">Quản trị viên và Trưởng phòng đăng nhập hệ thống</p>
         </div>
-        <button 
+        <button
           onClick={() => handleOpenModal()}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
         >
@@ -121,10 +121,10 @@ export default function UsersPage() {
                   <td className="px-6 py-4 text-sm text-slate-600 font-mono">{user.username}</td>
                   <td className="px-6 py-4 text-sm font-medium text-slate-900">{user.full_name}</td>
                   <td className="px-6 py-4 text-sm">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                      user.role === 'ADMIN' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
-                    }`}>
-                      {user.role === 'ADMIN' ? 'Quản trị viên' : 'Trưởng phòng'}
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${user.role === 'SUPER_ADMIN' ? 'bg-purple-50 text-purple-600' :
+                        user.role === 'ADMIN' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'
+                      }`}>
+                      {user.role === 'SUPER_ADMIN' ? 'Quản trị' : user.role === 'ADMIN' ? 'Admin' : 'User'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600">{(user as any).branch_name || '-'}</td>
@@ -157,7 +157,7 @@ export default function UsersPage() {
                   type="text"
                   required
                   value={formData.username}
-                  onChange={e => setFormData({...formData, username: e.target.value})}
+                  onChange={e => setFormData({ ...formData, username: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                 />
               </div>
@@ -169,7 +169,7 @@ export default function UsersPage() {
                   type="password"
                   required={!editingUser}
                   value={formData.password}
-                  onChange={e => setFormData({...formData, password: e.target.value})}
+                  onChange={e => setFormData({ ...formData, password: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                 />
               </div>
@@ -179,7 +179,7 @@ export default function UsersPage() {
                   type="text"
                   required
                   value={formData.full_name}
-                  onChange={e => setFormData({...formData, full_name: e.target.value})}
+                  onChange={e => setFormData({ ...formData, full_name: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                 />
               </div>
@@ -187,20 +187,21 @@ export default function UsersPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Vai trò</label>
                 <select
                   value={formData.role}
-                  onChange={e => setFormData({...formData, role: e.target.value as any, department_id: e.target.value === 'ADMIN' ? '' : formData.department_id, branch_id: e.target.value === 'ADMIN' ? '' : formData.branch_id})}
+                  onChange={e => setFormData({ ...formData, role: e.target.value as any, department_id: e.target.value === 'SUPER_ADMIN' ? '' : formData.department_id, branch_id: e.target.value === 'SUPER_ADMIN' ? '' : formData.branch_id })}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                 >
-                  <option value="MANAGER">Trưởng phòng</option>
-                  <option value="ADMIN">Quản trị viên</option>
+                  <option value="USER">User</option>
+                  <option value="ADMIN">Admin</option>
+                  <option value="SUPER_ADMIN">Quản trị</option>
                 </select>
               </div>
-              {formData.role === 'MANAGER' && (
+              {formData.role !== 'SUPER_ADMIN' && (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Chi nhánh</label>
                     <select
                       value={formData.branch_id}
-                      onChange={e => setFormData({...formData, branch_id: e.target.value})}
+                      onChange={e => setFormData({ ...formData, branch_id: e.target.value })}
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                       required
                     >
@@ -212,7 +213,7 @@ export default function UsersPage() {
                     <label className="block text-sm font-medium text-slate-700 mb-1">Phòng ban quản lý</label>
                     <select
                       value={formData.department_id}
-                      onChange={e => setFormData({...formData, department_id: e.target.value})}
+                      onChange={e => setFormData({ ...formData, department_id: e.target.value })}
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                       required
                     >
