@@ -153,7 +153,7 @@ export default function Permissions() {
                             <div className="flex items-center gap-2 mb-1">
                                 <Shield size={18} className={selectedRoleId === role.id ? "text-indigo-600" : "text-slate-400"} />
                                 <span className={`font-bold ${selectedRoleId === role.id ? "text-slate-900" : "text-slate-600"}`}>
-                                    {role.name === 'SUPER_ADMIN' ? 'Quản trị' : role.name === 'ADMIN' ? 'Admin' : 'User'}
+                                    {role.name === 'SUPER_ADMIN' ? 'Admin' : role.name === 'ADMIN' ? 'Quản trị' : 'User'}
                                 </span>
                             </div>
                             <p className="text-xs text-slate-500 line-clamp-1">{role.description}</p>

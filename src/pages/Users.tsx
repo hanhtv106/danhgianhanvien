@@ -134,7 +134,7 @@ export default function UsersPage() {
                     <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${user.role === 'SUPER_ADMIN' ? 'bg-purple-50 text-purple-600' :
                       user.role === 'ADMIN' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'
                       }`}>
-                      {user.role === 'SUPER_ADMIN' ? 'Quản trị' : user.role === 'ADMIN' ? 'Admin' : 'User'}
+                      {user.role === 'SUPER_ADMIN' ? 'Admin' : user.role === 'ADMIN' ? 'Quản trị' : 'User'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600">{(user as any).branch_name || '-'}</td>
@@ -211,7 +211,7 @@ export default function UsersPage() {
                   required
                 >
                   <option value="">-- Chọn vai trò --</option>
-                  {roles.map(r => <option key={r.id} value={r.id}>{r.name === 'SUPER_ADMIN' ? 'Quản trị' : r.name === 'ADMIN' ? 'Admin' : 'User'}</option>)}
+                  {roles.map(r => <option key={r.id} value={r.id}>{r.name === 'SUPER_ADMIN' ? 'Admin' : r.name === 'ADMIN' ? 'Quản trị' : 'User'}</option>)}
                 </select>
               </div>
               {formData.role === 'USER' && (

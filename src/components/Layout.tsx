@@ -128,7 +128,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-900 truncate">{user.full_name}</p>
                   <p className="text-xs text-slate-500 truncate">
-                    {user.role === 'SUPER_ADMIN' ? 'Quản trị' : user.role === 'ADMIN' ? 'Admin' : 'User'}
+                    {user.role === 'SUPER_ADMIN' ? 'Admin' : user.role === 'ADMIN' ? 'Quản trị' : 'User'}
                   </p>
                 </div>
               )}
