@@ -311,8 +311,7 @@ app.get("/api/evaluations", authenticate, async (req, res) => {
   const { date, department_id, branch_id, search } = req.query;
   try {
     let query = supabase.from('employees').select(`
-      id, full_name, employee_code, is_resigned, branch_id, department_id,
-      evaluations (id, stars, date, evaluation_reasons_junction (reason_id))
+      id, full_name, employee_code, is_resigned, branch_id, department_id
     `).eq('is_resigned', false);
 
     const user = (req as any).user;
@@ -338,12 +337,21 @@ app.get("/api/evaluations", authenticate, async (req, res) => {
       query = query.or(`full_name.ilike.%${search}%,employee_code.ilike.%${search}%`);
     }
 
-    const { data, error } = await query;
+    const { data: employees, error } = await query;
     if (error) throw error;
 
-    const processedRows = data.map((emp: any) => {
-      const evals = emp.evaluations?.filter((ev: any) => ev.date === date);
-      const ev = evals?.[0];
+    let evals: any[] = [];
+    if (employees && employees.length > 0) {
+      const empIds = employees.map((e: any) => e.id);
+      const { data: evData } = await supabase.from('evaluations')
+        .select('id, employee_id, stars, date, evaluation_reasons_junction (reason_id)')
+        .in('employee_id', empIds)
+        .eq('date', date);
+      evals = evData || [];
+    }
+
+    const processedRows = (employees || []).map((emp: any) => {
+      const ev = evals.find((e: any) => e.employee_id === emp.id);
       return {
         employee_id: emp.id,
         full_name: emp.full_name,
@@ -398,8 +406,7 @@ app.get("/api/summary", authenticate, async (req, res) => {
 
     let q = supabase.from('employees').select(`
       id, employee_code, full_name, branch_id, department_id,
-      departments(name), branches(name), 
-      evaluations(stars, date)
+      departments(name), branches(name)
     `).eq('is_resigned', false);
 
     if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
@@ -409,11 +416,26 @@ app.get("/api/summary", authenticate, async (req, res) => {
       q = q.eq('department_id', user.department_id);
     }
 
-    const { data, error } = await q;
+    const { data: employees, error } = await q;
     if (error) throw error;
 
-    const rows = data.map((emp: any) => {
-      const evalsInRange = (emp.evaluations || []).filter((e: any) => e.date >= startDate && e.date <= effectiveEndDateStr);
+    let evals: any[] = [];
+    if (employees && employees.length > 0) {
+      const empIds = employees.map((e: any) => e.id);
+
+      // Batch employee IDs into chunks if there are too many, but Supabase limit is usually high enough for .in()
+      // We will perform a single query for evaluations
+      const { data: evData } = await supabase.from('evaluations')
+        .select('employee_id, stars')
+        .in('employee_id', empIds)
+        .gte('date', startDate)
+        .lte('date', effectiveEndDateStr);
+
+      evals = evData || [];
+    }
+
+    const rows = (employees || []).map((emp: any) => {
+      const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
       const sumStarsDelta = evalsInRange.reduce((acc: number, cur: any) => acc + (cur.stars - 3), 0);
       return {
         id: emp.id,
@@ -441,7 +463,7 @@ app.get("/api/summary/departments", authenticate, async (req, res) => {
     }
 
     const user = (req as any).user;
-    let query = supabase.from('departments').select('id, name, branch_id, employees(id, is_resigned, evaluations(stars, date))');
+    let query = supabase.from('departments').select('id, name, branch_id, employees(id, is_resigned)');
 
     if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
       query = query.eq('branch_id', user.branch_id);
@@ -453,12 +475,28 @@ app.get("/api/summary/departments", authenticate, async (req, res) => {
     const { data, error } = await query;
     if (error) throw error;
 
+    const allEmpIds: number[] = [];
+    data.forEach((dept: any) => {
+      const activeEmps = (dept.employees || []).filter((e: any) => !e.is_resigned);
+      activeEmps.forEach((e: any) => allEmpIds.push(e.id));
+    });
+
+    let evals: any[] = [];
+    if (allEmpIds.length > 0) {
+      const { data: evData } = await supabase.from('evaluations')
+        .select('employee_id, stars')
+        .in('employee_id', allEmpIds)
+        .gte('date', startDate)
+        .lte('date', effectiveEndDateStr);
+      evals = evData || [];
+    }
+
     const rows = data.map((dept: any) => {
       const activeEmps = (dept.employees || []).filter((e: any) => !e.is_resigned);
       let totalStarsDelta = 0;
       activeEmps.forEach((emp: any) => {
-        const evals = (emp.evaluations || []).filter((e: any) => e.date >= startDate && e.date <= effectiveEndDateStr);
-        totalStarsDelta += evals.reduce((a: number, c: any) => a + (c.stars - 3), 0);
+        const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
+        totalStarsDelta += evalsInRange.reduce((a: number, c: any) => a + (c.stars - 3), 0);
       });
       return {
         id: dept.id,
@@ -490,12 +528,23 @@ app.get("/api/reports/department/:id", authenticate, async (req, res) => {
     }
 
     const { data: emps } = await supabase.from('employees')
-      .select('id, employee_code, full_name, evaluations(stars, date)')
+      .select('id, employee_code, full_name')
       .eq('department_id', department_id).eq('is_resigned', false);
 
+    let evals: any[] = [];
+    if (emps && emps.length > 0) {
+      const empIds = emps.map((e: any) => e.id);
+      const { data: evData } = await supabase.from('evaluations')
+        .select('employee_id, stars')
+        .in('employee_id', empIds)
+        .gte('date', startDate)
+        .lte('date', effectiveEndDateStr);
+      evals = evData || [];
+    }
+
     const empRows = (emps || []).map((emp: any) => {
-      const evals = (emp.evaluations || []).filter((e: any) => e.date >= startDate && e.date <= effectiveEndDateStr);
-      const sumDelta = evals.reduce((a: number, c: any) => a + (c.stars - 3), 0);
+      const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
+      const sumDelta = evalsInRange.reduce((a: number, c: any) => a + (c.stars - 3), 0);
       return {
         id: emp.id,
         employee_code: emp.employee_code,
