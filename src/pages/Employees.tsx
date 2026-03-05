@@ -414,6 +414,24 @@ export default function Employees() {
                     </div>
                   </div>
                 </div>
+
+                <div>
+                  <p className="text-slate-400 font-bold uppercase tracking-wider text-xs mb-1">Thành tích (Số sao)</p>
+                  <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 grid grid-cols-3 gap-2">
+                    <div className="text-center">
+                      <p className="text-[10px] text-amber-600 font-bold uppercase truncate">Tháng này</p>
+                      <p className="text-lg font-black text-amber-700">{selectedEmployee.stars_month || 0}</p>
+                    </div>
+                    <div className="border-x border-amber-200 text-center px-1">
+                      <p className="text-[10px] text-amber-600 font-bold uppercase truncate">Năm 2026</p>
+                      <p className="text-lg font-black text-amber-700">{selectedEmployee.stars_year || 0}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] text-amber-600 font-bold uppercase truncate">Tổng</p>
+                      <p className="text-lg font-black text-amber-700">{selectedEmployee.stars_all_time || 0}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-6">

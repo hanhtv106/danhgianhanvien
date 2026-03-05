@@ -39,6 +39,9 @@ export interface Employee {
   created_by_name?: string;
   updated_at?: string;
   updated_by_name?: string;
+  stars_month?: number;
+  stars_year?: number;
+  stars_all_time?: number;
 }
 
 export interface StarReason {

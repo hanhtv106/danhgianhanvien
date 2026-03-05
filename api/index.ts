@@ -245,6 +245,32 @@ app.delete("/api/reasons/:id", authenticate, async (req, res) => {
 
 app.get("/api/employees", authenticate, async (req, res) => {
   const user = (req as any).user;
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  const startOfMonth = `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`;
+  const startOfYear = `${currentYear}-01-01`;
+  const startOfAllTime = `2020-01-01`;
+
+  const nextMonth = new Date(currentYear, currentMonth, 1);
+  const lastDayOfMonth = new Date(nextMonth.getTime() - 1);
+  const endOfMonth = lastDayOfMonth.toISOString().split('T')[0];
+  const endOfYear = `${currentYear}-12-31`;
+
+  const monthStartObj = new Date(startOfMonth);
+  const monthEndObj = todayStr > endOfMonth ? new Date(endOfMonth) : new Date(todayStr);
+  const monthDiffDays = Math.ceil((monthEndObj.getTime() - monthStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  const yearStartObj = new Date(startOfYear);
+  const yearEndObj = todayStr > endOfYear ? new Date(endOfYear) : new Date(todayStr);
+  const yearDiffDays = Math.ceil((yearEndObj.getTime() - yearStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  const allTimeStartObj = new Date(startOfAllTime);
+  const allTimeEndObj = todayStr > endOfYear ? new Date(endOfYear) : new Date(todayStr);
+  const allTimeDiffDays = Math.ceil((allTimeEndObj.getTime() - allTimeStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
   let query = supabase.from('employees').select(`
     id, employee_code, full_name, department_id, branch_id, cccd, is_resigned, created_at, updated_at,
     departments(name), branches(name),
@@ -259,18 +285,48 @@ app.get("/api/employees", authenticate, async (req, res) => {
     query = query.eq('department_id', user.department_id);
   }
 
-  const { data, error } = await query;
-  if (error) {
-    console.error("GET /api/employees error:", error);
-    return res.status(500).json({ error: "Lỗi hệ thống" });
-  }
-  const rows = data.map((e: any) => ({
-    ...e,
-    department_name: e.departments?.name,
-    branch_name: e.branches?.name,
-    created_by_name: (e as any).created_by_user?.full_name,
-    updated_by_name: (e as any).updated_by_user?.full_name
-  }));
+  const { data: employees, error: eErr } = await query;
+  if (eErr) return res.status(500).json({ error: "Lỗi hệ thống" });
+
+  // Fetch all evaluations for these employees
+  const empIds = employees.map(e => e.id);
+  const { data: evals, error: evErr } = await supabase.from('evaluations')
+    .select('employee_id, stars, date')
+    .in('employee_id', empIds)
+    .gte('date', startOfAllTime)
+    .lte('date', endOfYear);
+
+  const evaluationData = evals || [];
+
+  const rows = employees.map((e: any) => {
+    const empEvals = evaluationData.filter(ev => ev.employee_id === e.id);
+
+    // Month stars
+    const monthDelta = empEvals.filter(ev => ev.date >= startOfMonth && ev.date <= endOfMonth).reduce((a, c) => a + (c.stars - 3), 0);
+    const monthDays = getEmpDiffDays(e.created_at, monthStartObj, monthEndObj, monthDiffDays);
+    const monthStars = monthDays * 3 + monthDelta;
+
+    // Year stars
+    const yearDelta = empEvals.filter(ev => ev.date >= startOfYear && ev.date <= endOfYear).reduce((a, c) => a + (c.stars - 3), 0);
+    const yearDays = getEmpDiffDays(e.created_at, yearStartObj, yearEndObj, yearDiffDays);
+    const yearStars = yearDays * 3 + yearDelta;
+
+    // All Time stars
+    const allTimeDelta = empEvals.reduce((a, c) => a + (c.stars - 3), 0);
+    const allTimeDays = getEmpDiffDays(e.created_at, allTimeStartObj, allTimeEndObj, allTimeDiffDays);
+    const allTimeStars = allTimeDays * 3 + allTimeDelta;
+
+    return {
+      ...e,
+      department_name: e.departments?.name,
+      branch_name: e.branches?.name,
+      created_by_name: (e as any).created_by_user?.full_name,
+      updated_by_name: (e as any).updated_by_user?.full_name,
+      stars_month: monthStars,
+      stars_year: yearStars,
+      stars_all_time: allTimeStars
+    };
+  });
   res.json(rows);
 });
 
