@@ -19,9 +19,9 @@ export default function Login({ onLogin }: LoginProps) {
     setLoading(true);
     try {
       // Clear any old session data before trying to login
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('user');
+
       const data = await apiFetch('/api/login', {
         method: 'POST',
         body: JSON.stringify({ username, password }),

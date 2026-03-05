@@ -16,9 +16,15 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('evaluation');
   const [loading, setLoading] = useState(true);
 
+  const handleLogout = () => {
+    setUser(null);
+    sessionStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+  };
+
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('token');
+    const savedUser = sessionStorage.getItem('user');
+    const token = sessionStorage.getItem('token');
     if (savedUser && token) {
       setUser(JSON.parse(savedUser));
     }
@@ -29,17 +35,37 @@ export default function App() {
     return () => window.removeEventListener('tabChange', handleTabChange);
   }, []);
 
+  // Inactivity timeout (15 minutes)
+  useEffect(() => {
+    if (!user) return;
+
+    let timeoutId: number;
+    const INACTIVITY_TIME = 15 * 60 * 1000; // 15 minutes
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => {
+        handleLogout();
+        alert("Phiên làm việc đã hết hạn do bạn không hoạt động trong 15 phút.");
+      }, INACTIVITY_TIME);
+    };
+
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach(event => window.addEventListener(event, resetTimer));
+
+    resetTimer();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach(event => window.removeEventListener(event, resetTimer));
+    };
+  }, [user]);
+
   const handleLogin = (userData: User, token: string) => {
     setUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData));
-    localStorage.setItem('token', token);
+    sessionStorage.setItem('user', JSON.stringify(userData));
+    sessionStorage.setItem('token', token);
     setActiveTab('evaluation');
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
   };
 
   if (loading) return null;
