@@ -660,10 +660,11 @@ app.get("/api/dashboard/overview", authenticate, async (req, res) => {
       }
     });
 
-    // Evaluations for all time
-    const startOfAllTime = `2020-01-01`;
-    const endOfAllTime = `${currentYear}-12-31`;
+    // Definitions for time ranges
+    const startOfYear = `${currentYear}-01-01`;
+    const endOfYear = `${currentYear}-12-31`;
     const startOfMonth = `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`;
+    const startOfAllTime = `2020-01-01`; // Safe lower bound
 
     // Determine the last day of the current month
     const nextMonth = new Date(currentYear, currentMonth, 1);
@@ -677,41 +678,51 @@ app.get("/api/dashboard/overview", authenticate, async (req, res) => {
         .select('employee_id, stars, date')
         .in('employee_id', empIds)
         .gte('date', startOfAllTime)
-        .lte('date', endOfAllTime);
+        .lte('date', endOfYear);
       evals = evData || [];
     }
 
-    // Calculate diff days for month and all time up to today
+    // Calculate diff days
     const todayStr = new Date().toISOString().split('T')[0];
 
-    // All time diff days
+    // All time
     const allTimeStartObj = new Date(startOfAllTime);
-    const allTimeEndObj = todayStr > endOfAllTime ? new Date(endOfAllTime) : new Date(todayStr);
+    const allTimeEndObj = todayStr > endOfYear ? new Date(endOfYear) : new Date(todayStr); // should use endOfYear if we want to cap at today
     const allTimeDiffDays = Math.ceil((allTimeEndObj.getTime() - allTimeStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-    // Month diff days
+    // Year
+    const yearStartObj = new Date(startOfYear);
+    const yearEndObj = todayStr > endOfYear ? new Date(endOfYear) : new Date(todayStr);
+    const yearDiffDays = Math.ceil((yearEndObj.getTime() - yearStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    // Month
     const monthStartObj = new Date(startOfMonth);
     const monthEndObj = todayStr > endOfMonth ? new Date(endOfMonth) : new Date(todayStr);
-    let monthDiffDays = 0;
-    if (monthEndObj >= monthStartObj) {
-      monthDiffDays = Math.ceil((monthEndObj.getTime() - monthStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    }
+    const monthDiffDays = Math.ceil((monthEndObj.getTime() - monthStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
     const empScoresAllTime = employees?.map((emp: any) => {
       const evs = evals.filter((e: any) => e.employee_id === emp.id);
       const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-      const empDiffDaysAllTime = getEmpDiffDays(emp.created_at, allTimeStartObj, allTimeEndObj, allTimeDiffDays);
-      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDaysAllTime * 3 + delta };
+      const empDiffDays = getEmpDiffDays(emp.created_at, allTimeStartObj, allTimeEndObj, allTimeDiffDays);
+      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDays * 3 + delta };
+    }) || [];
+
+    const empScoresYear = employees?.map((emp: any) => {
+      const evs = evals.filter((e: any) => e.employee_id === emp.id && e.date >= startOfYear && e.date <= endOfYear);
+      const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
+      const empDiffDays = getEmpDiffDays(emp.created_at, yearStartObj, yearEndObj, yearDiffDays);
+      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDays * 3 + delta };
     }) || [];
 
     const empScoresMonth = employees?.map((emp: any) => {
       const evs = evals.filter((e: any) => e.employee_id === emp.id && e.date >= startOfMonth && e.date <= endOfMonth);
       const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-      const empDiffDaysMonth = getEmpDiffDays(emp.created_at, monthStartObj, monthEndObj, monthDiffDays);
-      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDaysMonth * 3 + delta };
+      const empDiffDays = getEmpDiffDays(emp.created_at, monthStartObj, monthEndObj, monthDiffDays);
+      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDays * 3 + delta };
     }) || [];
 
-    const top_year = empScoresAllTime.sort((a, b) => b.total - a.total).slice(0, 3);
+    const top_all_time = empScoresAllTime.sort((a, b) => b.total - a.total).slice(0, 3);
+    const top_year = empScoresYear.sort((a, b) => b.total - a.total).slice(0, 3);
     const top_month = empScoresMonth.sort((a, b) => b.total - a.total).slice(0, 3);
 
     res.json({
@@ -720,6 +731,7 @@ app.get("/api/dashboard/overview", authenticate, async (req, res) => {
       total_employees,
       branch_breakdown: Object.entries(branchBreakdown).map(([name, count]) => ({ name, count })),
       department_breakdown: Object.entries(deptBreakdown).map(([name, count]) => ({ name, count })),
+      top_all_time,
       top_year,
       top_month
     });

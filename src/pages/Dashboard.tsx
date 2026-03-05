@@ -115,7 +115,8 @@ export default function Dashboard() {
                         <Trophy className="text-amber-500" size={20} />
                         <h3 className="font-bold text-amber-900">Bảng vàng vinh danh</h3>
                     </div>
-                    <div className="p-6 flex flex-col xl:flex-row gap-6">
+                    <div className="p-6 grid grid-cols-1 xl:grid-cols-3 gap-6">
+                        {/* Top Month */}
                         <div className="flex-1">
                             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                                 <CalendarIcon className="w-4 h-4 text-slate-400" /> Top tháng này
@@ -140,29 +141,53 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        <div className="w-px bg-slate-100 hidden xl:block"></div>
-
-                        <div className="flex-1">
+                        {/* Top Year */}
+                        <div className="flex-1 border-t xl:border-t-0 xl:border-l border-slate-100 pt-6 xl:pt-0 xl:pl-6">
                             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                <Trophy className="w-4 h-4 text-amber-400" /> Top năm hiển hách
+                                <Trophy className="w-4 h-4 text-amber-400" /> Top năm 2026
                             </h4>
                             <div className="space-y-3">
                                 {data.top_year.map((emp: any, i: number) => (
-                                    <div key={i} className="flex items-center gap-3 p-3 bg-gradient-to-r from-amber-50 to-white border border-amber-100 rounded-2xl shadow-sm">
-                                        <div className={`w-8 h-8 rounded-full font-black flex items-center justify-center text-sm shadow-sm ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-slate-300 text-white' : 'bg-amber-200/50 text-amber-800'}`}>
+                                    <div key={i} className="flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-2xl shadow-sm">
+                                        <div className="w-8 h-8 rounded-full bg-slate-50 font-black text-slate-400 flex items-center justify-center text-sm">
                                             #{i + 1}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="font-bold text-slate-900 text-sm truncate">{emp.name}</p>
                                             <p className="text-xs text-slate-500 truncate">{emp.branch || 'N/A'}</p>
                                         </div>
-                                        <div className="flex items-center gap-1 font-black text-amber-600 bg-amber-100/50 px-2 py-1 rounded-xl border border-amber-200/50">
+                                        <div className="flex items-center gap-1 font-black text-slate-600 bg-slate-100 px-2 py-1 rounded-xl">
                                             <span>{emp.total}</span>
                                             <Star size={12} fill="currentColor" />
                                         </div>
                                     </div>
                                 ))}
                                 {data.top_year.length === 0 && <p className="text-sm text-slate-400 italic">Chưa có dữ liệu năm nay</p>}
+                            </div>
+                        </div>
+
+                        {/* Top All Time */}
+                        <div className="flex-1 border-t xl:border-t-0 xl:border-l border-slate-100 pt-6 xl:pt-0 xl:pl-6">
+                            <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                <Star className="w-4 h-4 text-indigo-400" /> Top Toàn thời gian
+                            </h4>
+                            <div className="space-y-3">
+                                {data.top_all_time?.map((emp: any, i: number) => (
+                                    <div key={i} className="flex items-center gap-3 p-3 bg-gradient-to-r from-indigo-50 to-white border border-indigo-100 rounded-2xl shadow-sm">
+                                        <div className={`w-8 h-8 rounded-full font-black flex items-center justify-center text-sm shadow-sm ${i === 0 ? 'bg-indigo-500 text-white' : i === 1 ? 'bg-indigo-300 text-white' : 'bg-indigo-100 text-indigo-600'}`}>
+                                            #{i + 1}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-bold text-slate-900 text-sm truncate">{emp.name}</p>
+                                            <p className="text-xs text-slate-500 truncate">{emp.branch || 'N/A'}</p>
+                                        </div>
+                                        <div className="flex items-center gap-1 font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-xl border border-indigo-100">
+                                            <span>{emp.total}</span>
+                                            <Star size={12} fill="currentColor" />
+                                        </div>
+                                    </div>
+                                ))}
+                                {(!data.top_all_time || data.top_all_time.length === 0) && <p className="text-sm text-slate-400 italic">Chưa có dữ liệu toàn thời gian</p>}
                             </div>
                         </div>
                     </div>
