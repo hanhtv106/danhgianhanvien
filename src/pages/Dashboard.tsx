@@ -46,7 +46,7 @@ export default function Dashboard() {
                         <Users size={32} />
                     </div>
                     <div className="relative z-10">
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Tổng nhân viên</p>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Tổng nhân viên đang làm việc</p>
                         <p className="text-4xl font-black text-slate-900">{data.total_employees}</p>
                     </div>
                 </div>
@@ -57,7 +57,7 @@ export default function Dashboard() {
                         <MapPin size={32} />
                     </div>
                     <div className="relative z-10">
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Tổng chi nhánh</p>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Tổng số chi nhánh</p>
                         <p className="text-4xl font-black text-slate-900">{data.total_branches}</p>
                     </div>
                 </div>
@@ -68,7 +68,7 @@ export default function Dashboard() {
                         <Building2 size={32} />
                     </div>
                     <div className="relative z-10">
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Tổng phòng ban</p>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Tổng số phòng ban</p>
                         <p className="text-4xl font-black text-slate-900">{data.total_departments}</p>
                     </div>
                 </div>
