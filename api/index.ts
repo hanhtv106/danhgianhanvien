@@ -641,20 +641,26 @@ app.get("/api/dashboard/overview", authenticate, async (req, res) => {
 
     const total_employees = employees?.length || 0;
 
-    // Branches & Departments count (from the employees view to ensure RBAC limits)
-    const branchSet = new Set();
-    const deptSet = new Set();
+    // Direct counts for KPI cards (not inferred from employees)
+    let bQuery = supabase.from('branches').select('*', { count: 'exact', head: true });
+    if (user.role !== 'SUPER_ADMIN' && user.branch_id) bQuery = bQuery.eq('id', user.branch_id);
+    const { count: total_branches } = await bQuery;
+
+    let dQuery = supabase.from('departments').select('*', { count: 'exact', head: true });
+    if (user.role !== 'SUPER_ADMIN' && user.branch_id) dQuery = dQuery.eq('branch_id', user.branch_id);
+    if (user.role === 'USER' && user.department_id) dQuery = dQuery.eq('id', user.department_id);
+    const { count: total_departments } = await dQuery;
+
+    // Breakdown (employee per branch/dept) - keeping this logic for the charts/lists
     const branchBreakdown: Record<string, number> = {};
     const deptBreakdown: Record<string, number> = {};
 
     employees?.forEach((e: any) => {
       if (e.branch_id) {
-        branchSet.add(e.branch_id);
         const bName = e.branches?.name || 'Chưa xếp nhánh';
         branchBreakdown[bName] = (branchBreakdown[bName] || 0) + 1;
       }
       if (e.department_id) {
-        deptSet.add(e.department_id);
         const dName = e.departments?.name || 'Chưa xếp phòng';
         deptBreakdown[dName] = (deptBreakdown[dName] || 0) + 1;
       }
@@ -726,8 +732,8 @@ app.get("/api/dashboard/overview", authenticate, async (req, res) => {
     const top_month = empScoresMonth.sort((a, b) => b.total - a.total).slice(0, 3);
 
     res.json({
-      total_branches: branchSet.size,
-      total_departments: deptSet.size,
+      total_branches: total_branches || 0,
+      total_departments: total_departments || 0,
       total_employees,
       branch_breakdown: Object.entries(branchBreakdown).map(([name, count]) => ({ name, count })),
       department_breakdown: Object.entries(deptBreakdown).map(([name, count]) => ({ name, count })),
