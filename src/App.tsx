@@ -32,6 +32,7 @@ export default function App() {
 
     const handleTabChange = (e: any) => setActiveTab(e.detail);
     window.addEventListener('tabChange', handleTabChange);
+    document.title = 'Hệ thống Đánh giá Nhân viên';
     return () => window.removeEventListener('tabChange', handleTabChange);
   }, []);
 
