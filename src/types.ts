@@ -35,6 +35,10 @@ export interface Employee {
   branch_name?: string;
   cccd: string;
   is_resigned: boolean;
+  created_at?: string;
+  created_by_name?: string;
+  updated_at?: string;
+  updated_by_name?: string;
 }
 
 export interface StarReason {

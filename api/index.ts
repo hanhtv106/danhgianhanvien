@@ -245,7 +245,12 @@ app.delete("/api/reasons/:id", authenticate, async (req, res) => {
 
 app.get("/api/employees", authenticate, async (req, res) => {
   const user = (req as any).user;
-  let query = supabase.from('employees').select('id, employee_code, full_name, department_id, branch_id, cccd, is_resigned, departments(name), branches(name)');
+  let query = supabase.from('employees').select(`
+    id, employee_code, full_name, department_id, branch_id, cccd, is_resigned, created_at, updated_at,
+    departments(name), branches(name),
+    created_by_user:users!employees_created_by_fkey(full_name),
+    updated_by_user:users!employees_updated_by_fkey(full_name)
+  `);
 
   if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
     query = query.eq('branch_id', user.branch_id);
@@ -255,19 +260,28 @@ app.get("/api/employees", authenticate, async (req, res) => {
   }
 
   const { data, error } = await query;
-  if (error) return res.status(500).json({ error: "Lỗi hệ thống" });
+  if (error) {
+    console.error("GET /api/employees error:", error);
+    return res.status(500).json({ error: "Lỗi hệ thống" });
+  }
   const rows = data.map((e: any) => ({
     ...e,
     department_name: e.departments?.name,
-    branch_name: e.branches?.name
+    branch_name: e.branches?.name,
+    created_by_name: (e as any).created_by_user?.full_name,
+    updated_by_name: (e as any).updated_by_user?.full_name
   }));
   res.json(rows);
 });
 
 app.post("/api/employees", authenticate, async (req, res) => {
   const { employee_code, full_name, department_id, branch_id, cccd, is_resigned } = req.body;
+  const user = (req as any).user;
   const { data, error } = await supabase.from('employees').insert({
-    employee_code, full_name, department_id, branch_id, cccd, is_resigned: is_resigned ? true : false
+    employee_code, full_name, department_id, branch_id, cccd,
+    is_resigned: is_resigned ? true : false,
+    created_by: user.id,
+    created_at: new Date().toISOString()
   }).select('id').single();
   if (error) return res.status(400).json({ error: "Lỗi khi thêm nhân viên" });
   res.json({ id: data.id });
@@ -277,13 +291,15 @@ app.post("/api/employees/import", authenticate, async (req, res) => {
   const { data } = req.body;
   if (!data || !Array.isArray(data)) return res.status(400).json({ error: "Dữ liệu không hợp lệ" });
   try {
+    const user = (req as any).user;
     const records = data.map((emp: any) => ({
       employee_code: emp.employee_code,
       full_name: emp.full_name,
       department_id: emp.department_id,
       branch_id: emp.branch_id,
       cccd: emp.cccd || '',
-      is_resigned: emp.is_resigned ? true : false
+      is_resigned: emp.is_resigned ? true : false,
+      created_by: user.id
     }));
     const { error } = await supabase.from('employees').upsert(records, { onConflict: 'employee_code' });
     if (error) throw error;
@@ -295,8 +311,12 @@ app.post("/api/employees/import", authenticate, async (req, res) => {
 
 app.put("/api/employees/:id", authenticate, async (req, res) => {
   const { employee_code, full_name, department_id, branch_id, cccd, is_resigned } = req.body;
+  const user = (req as any).user;
   const { error } = await supabase.from('employees').update({
-    employee_code, full_name, department_id, branch_id, cccd, is_resigned: is_resigned ? true : false
+    employee_code, full_name, department_id, branch_id, cccd,
+    is_resigned: is_resigned ? true : false,
+    updated_by: user.id,
+    updated_at: new Date().toISOString()
   }).eq('id', req.params.id);
   if (error) return res.status(400).json({ error: "Lỗi khi cập nhật" });
   res.json({ success: true });
@@ -581,7 +601,11 @@ app.get("/api/reports/employee/:id", authenticate, async (req, res) => {
     const effectiveEndDateStr = (endDate as string) > new Date().toISOString().split('T')[0] ? new Date().toISOString().split('T')[0] : (endDate as string);
 
     const user = (req as any).user;
-    const { data: empData } = await supabase.from('employees').select('*, departments(name), branches(name)').eq('id', employee_id).single();
+    const { data: empData } = await supabase.from('employees').select(`
+      *, departments(name), branches(name),
+      created_by_user:users!employees_created_by_fkey(full_name),
+      updated_by_user:users!employees_updated_by_fkey(full_name)
+    `).eq('id', employee_id).single();
     if (!empData) return res.status(404).json({ error: "Nhân viên không tồn tại" });
 
     // Authorization Check
@@ -593,7 +617,9 @@ app.get("/api/reports/employee/:id", authenticate, async (req, res) => {
     const employee = {
       ...empData,
       department_name: empData.departments?.name,
-      branch_name: empData.branches?.name
+      branch_name: empData.branches?.name,
+      created_by_name: (empData as any).created_by_user?.full_name,
+      updated_by_name: (empData as any).updated_by_user?.full_name
     };
 
     const { data: evals } = await supabase.from('evaluations')
