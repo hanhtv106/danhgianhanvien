@@ -61,7 +61,7 @@ export default function Employees() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.department_id) {
       alert('Vui lòng chọn phòng ban');
       return;
@@ -73,7 +73,7 @@ export default function Employees() {
 
     const url = editingEmployee ? `/api/employees/${editingEmployee.id}` : '/api/employees';
     const method = editingEmployee ? 'PUT' : 'POST';
-    
+
     try {
       await apiFetch(url, {
         method,
@@ -104,7 +104,7 @@ export default function Employees() {
       const wsname = wb.SheetNames[0];
       const ws = wb.Sheets[wsname];
       const data = XLSX.utils.sheet_to_json(ws);
-      
+
       // Map names to IDs
       const mappedData = data.map((row: any) => ({
         employee_code: row['Mã nhân viên']?.toString(),
@@ -171,7 +171,7 @@ export default function Employees() {
             <span>Import Excel</span>
             <input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleImport} />
           </label>
-          <button 
+          <button
             onClick={() => handleOpenModal()}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
           >
@@ -240,7 +240,7 @@ export default function Employees() {
                     type="text"
                     required
                     value={formData.employee_code}
-                    onChange={e => setFormData({...formData, employee_code: e.target.value})}
+                    onChange={e => setFormData({ ...formData, employee_code: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                   />
                 </div>
@@ -250,7 +250,7 @@ export default function Employees() {
                     type="text"
                     required
                     value={formData.full_name}
-                    onChange={e => setFormData({...formData, full_name: e.target.value})}
+                    onChange={e => setFormData({ ...formData, full_name: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                   />
                 </div>
@@ -260,7 +260,17 @@ export default function Employees() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Chi nhánh</label>
                   <select
                     value={formData.branch_id}
-                    onChange={e => setFormData({...formData, branch_id: e.target.value})}
+                    onChange={e => {
+                      const newBranchId = e.target.value;
+                      setFormData(prev => ({
+                        ...prev,
+                        branch_id: newBranchId,
+                        // Reset department if it doesn't belong to the new branch
+                        department_id: prev.department_id && departments.find(d => d.id.toString() === prev.department_id)?.branch_id?.toString() === newBranchId
+                          ? prev.department_id
+                          : ''
+                      }));
+                    }}
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                   >
                     <option value="">-- Chọn chi nhánh --</option>
@@ -271,11 +281,21 @@ export default function Employees() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Phòng ban</label>
                   <select
                     value={formData.department_id}
-                    onChange={e => setFormData({...formData, department_id: e.target.value})}
+                    onChange={e => {
+                      const dept = departments.find(d => d.id.toString() === e.target.value);
+                      setFormData(prev => ({
+                        ...prev,
+                        department_id: e.target.value,
+                        branch_id: dept?.branch_id?.toString() || prev.branch_id
+                      }));
+                    }}
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                   >
                     <option value="">-- Chọn phòng ban --</option>
-                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    {departments
+                      .filter(d => !formData.branch_id || d.branch_id?.toString() === formData.branch_id)
+                      .map(d => <option key={d.id} value={d.id}>{d.name}</option>)
+                    }
                   </select>
                 </div>
               </div>
@@ -286,7 +306,7 @@ export default function Employees() {
                     type="text"
                     required
                     value={formData.cccd}
-                    onChange={e => setFormData({...formData, cccd: e.target.value})}
+                    onChange={e => setFormData({ ...formData, cccd: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                   />
                 </div>
@@ -296,7 +316,7 @@ export default function Employees() {
                       <input
                         type="checkbox"
                         checked={formData.is_resigned}
-                        onChange={e => setFormData({...formData, is_resigned: e.target.checked})}
+                        onChange={e => setFormData({ ...formData, is_resigned: e.target.checked })}
                         className="w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
                       />
                       <span className="text-sm font-medium text-slate-700">Đã nghỉ việc</span>

@@ -8,10 +8,16 @@ export default function Departments() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
   const [name, setName] = useState('');
+  const [branchId, setBranchId] = useState<string>('');
+  const [branches, setBranches] = useState<any[]>([]);
 
   const fetchData = async () => {
-    const data = await apiFetch('/api/departments');
-    setDepartments(data);
+    const [depts, branchData] = await Promise.all([
+      apiFetch('/api/departments'),
+      apiFetch('/api/branches')
+    ]);
+    setDepartments(depts);
+    setBranches(branchData);
   };
 
   useEffect(() => {
@@ -22,9 +28,11 @@ export default function Departments() {
     if (dept) {
       setEditingDept(dept);
       setName(dept.name);
+      setBranchId(dept.branch_id?.toString() || '');
     } else {
       setEditingDept(null);
       setName('');
+      setBranchId('');
     }
     setIsModalOpen(true);
   };
@@ -33,11 +41,11 @@ export default function Departments() {
     e.preventDefault();
     const url = editingDept ? `/api/departments/${editingDept.id}` : '/api/departments';
     const method = editingDept ? 'PUT' : 'POST';
-    
+
     try {
       await apiFetch(url, {
         method,
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, branch_id: branchId ? parseInt(branchId) : null }),
       });
       setIsModalOpen(false);
       fetchData();
@@ -60,7 +68,7 @@ export default function Departments() {
           <h2 className="text-2xl font-bold text-slate-900">Quản lý Phòng ban</h2>
           <p className="text-slate-500">Danh sách các phòng ban trong công ty</p>
         </div>
-        <button 
+        <button
           onClick={() => handleOpenModal()}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
         >
@@ -75,6 +83,7 @@ export default function Departments() {
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="px-6 py-4 text-sm font-semibold text-slate-700">ID</th>
               <th className="px-6 py-4 text-sm font-semibold text-slate-700">Tên phòng ban</th>
+              <th className="px-6 py-4 text-sm font-semibold text-slate-700">Chi nhánh</th>
               <th className="px-6 py-4 text-sm font-semibold text-slate-700 text-right">Thao tác</th>
             </tr>
           </thead>
@@ -83,6 +92,11 @@ export default function Departments() {
               <tr key={dept.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-6 py-4 text-sm text-slate-500">{dept.id}</td>
                 <td className="px-6 py-4 text-sm font-medium text-slate-900">{dept.name}</td>
+                <td className="px-6 py-4 text-sm text-slate-600">
+                  <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-medium">
+                    {dept.branch_name || 'Chưa gán'}
+                  </span>
+                </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => handleOpenModal(dept)} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors">
@@ -114,6 +128,20 @@ export default function Departments() {
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                   placeholder="VD: Phòng Hành chính"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Chi nhánh</label>
+                <select
+                  required
+                  value={branchId}
+                  onChange={e => setBranchId(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                >
+                  <option value="">-- Chọn chi nhánh --</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex justify-end gap-3 mt-8">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2 text-slate-600 hover:bg-slate-50 rounded-xl transition-colors">Hủy</button>

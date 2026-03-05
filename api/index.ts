@@ -165,17 +165,29 @@ app.delete("/api/branches/:id", authenticate, async (req, res) => {
 });
 
 app.get("/api/departments", authenticate, async (req, res) => {
-  const { data } = await supabase.from('departments').select('*');
-  res.json(data || []);
+  const user = (req as any).user;
+  let query = supabase.from('departments').select('*, branches(name)');
+
+  if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
+    query = query.eq('branch_id', user.branch_id);
+  }
+
+  const { data } = await query;
+  const rows = (data || []).map((d: any) => ({
+    ...d,
+    branch_name: d.branches?.name
+  }));
+  res.json(rows);
 });
 app.post("/api/departments", authenticate, async (req, res) => {
-  const { name } = req.body;
-  const { data, error } = await supabase.from('departments').insert({ name }).select('*').single();
-  if (error) return res.status(400).json({ error: "Bộ phận đã tồn tại" });
+  const { name, branch_id } = req.body;
+  const { data, error } = await supabase.from('departments').insert({ name, branch_id: branch_id || null }).select('*').single();
+  if (error) return res.status(400).json({ error: "Bộ phận đã tồn tại hoặc dữ liệu không hợp lệ" });
   res.json(data);
 });
 app.put("/api/departments/:id", authenticate, async (req, res) => {
-  await supabase.from('departments').update({ name: req.body.name }).eq('id', req.params.id);
+  const { name, branch_id } = req.body;
+  await supabase.from('departments').update({ name, branch_id: branch_id || null }).eq('id', req.params.id);
   res.json({ success: true });
 });
 app.delete("/api/departments/:id", authenticate, async (req, res) => {
@@ -202,7 +214,17 @@ app.delete("/api/reasons/:id", authenticate, async (req, res) => {
 });
 
 app.get("/api/employees", authenticate, async (req, res) => {
-  const { data, error } = await supabase.from('employees').select('id, employee_code, full_name, department_id, branch_id, cccd, is_resigned, departments(name), branches(name)');
+  const user = (req as any).user;
+  let query = supabase.from('employees').select('id, employee_code, full_name, department_id, branch_id, cccd, is_resigned, departments(name), branches(name)');
+
+  if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
+    query = query.eq('branch_id', user.branch_id);
+  }
+  if (user.role === 'USER' && user.department_id) {
+    query = query.eq('department_id', user.department_id);
+  }
+
+  const { data, error } = await query;
   if (error) return res.status(500).json({ error: "Lỗi hệ thống" });
   const rows = data.map((e: any) => ({
     ...e,
@@ -259,12 +281,18 @@ app.get("/api/evaluations", authenticate, async (req, res) => {
   const { date, department_id } = req.query;
   try {
     let query = supabase.from('employees').select(`
-      id, full_name, employee_code, is_resigned,
+      id, full_name, employee_code, is_resigned, branch_id, department_id,
       evaluations (id, stars, date, evaluation_reasons_junction (reason_id))
     `).eq('is_resigned', false);
 
+    const user = (req as any).user;
+    if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
+      query = query.eq('branch_id', user.branch_id);
+    }
     if (department_id) {
       query = query.eq('department_id', department_id);
+    } else if (user.role === 'USER' && user.department_id) {
+      query = query.eq('department_id', user.department_id);
     }
 
     const { data, error } = await query;

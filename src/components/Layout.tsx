@@ -43,17 +43,19 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const menuItems = [
-    { icon: Star, label: 'Đánh giá', path: 'evaluation', roles: ['SUPER_ADMIN', 'ADMIN', 'USER'] },
-    { icon: BarChart3, label: 'Báo cáo', path: 'reports', roles: ['SUPER_ADMIN', 'ADMIN', 'USER'] },
-    { icon: Users, label: 'Nhân viên', path: 'employees', roles: ['SUPER_ADMIN', 'ADMIN'] },
-    { icon: MapPin, label: 'Chi nhánh', path: 'branches', roles: ['SUPER_ADMIN'] },
-    { icon: Building2, label: 'Phòng ban', path: 'departments', roles: ['SUPER_ADMIN', 'ADMIN'] },
-    { icon: Star, label: 'Lý do sao', path: 'reasons', roles: ['SUPER_ADMIN', 'ADMIN'] },
-    { icon: Users, label: 'Người dùng', path: 'users', roles: ['SUPER_ADMIN'] },
-    { icon: Shield, label: 'Phân quyền', path: 'permissions', roles: ['SUPER_ADMIN'] },
+    { icon: Star, label: 'Đánh giá', path: 'evaluation', permission: 'evaluations:view' },
+    { icon: BarChart3, label: 'Báo cáo', path: 'reports', permission: 'reports:view' },
+    { icon: Users, label: 'Nhân viên', path: 'employees', permission: 'employees:view' },
+    { icon: MapPin, label: 'Chi nhánh', path: 'branches', permission: 'branches:view' },
+    { icon: Building2, label: 'Phòng ban', path: 'departments', permission: 'departments:view' },
+    { icon: Star, label: 'Lý do sao', path: 'reasons', permission: 'reasons:view' },
+    { icon: Users, label: 'Người dùng', path: 'users', permission: 'users:view' },
+    { icon: Shield, label: 'Phân quyền', path: 'permissions', permission: 'users:edit' }, // Super admins usually have users:edit
   ];
 
-  const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));
+  const filteredMenu = menuItems.filter(item =>
+    user.role === 'SUPER_ADMIN' || user.permissions?.includes(item.permission)
+  );
 
   const [activeTab, setActiveTab] = useState(filteredMenu[0]?.path || 'evaluation');
 

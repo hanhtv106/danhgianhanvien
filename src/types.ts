@@ -16,6 +16,8 @@ export interface Branch {
 export interface Department {
   id: number;
   name: string;
+  branch_id?: number;
+  branch_name?: string;
 }
 
 export interface Position {

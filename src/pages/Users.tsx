@@ -220,7 +220,17 @@ export default function UsersPage() {
                     <label className="block text-sm font-medium text-slate-700 mb-1">Chi nhánh</label>
                     <select
                       value={formData.branch_id}
-                      onChange={e => setFormData({ ...formData, branch_id: e.target.value })}
+                      onChange={e => {
+                        const newBranchId = e.target.value;
+                        setFormData(prev => ({
+                          ...prev,
+                          branch_id: newBranchId,
+                          // Reset department if it doesn't belong to the new branch
+                          department_id: prev.department_id && departments.find(d => d.id.toString() === prev.department_id)?.branch_id?.toString() === newBranchId
+                            ? prev.department_id
+                            : ''
+                        }));
+                      }}
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                       required
                     >
@@ -232,12 +242,22 @@ export default function UsersPage() {
                     <label className="block text-sm font-medium text-slate-700 mb-1">Phòng ban quản lý</label>
                     <select
                       value={formData.department_id}
-                      onChange={e => setFormData({ ...formData, department_id: e.target.value })}
+                      onChange={e => {
+                        const dept = departments.find(d => d.id.toString() === e.target.value);
+                        setFormData(prev => ({
+                          ...prev,
+                          department_id: e.target.value,
+                          branch_id: (dept as any)?.branch_id?.toString() || prev.branch_id
+                        }));
+                      }}
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                       required
                     >
                       <option value="">-- Chọn phòng ban --</option>
-                      {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      {departments
+                        .filter(d => !formData.branch_id || (d as any).branch_id?.toString() === formData.branch_id)
+                        .map(d => <option key={d.id} value={d.id}>{d.name}</option>)
+                      }
                     </select>
                   </div>
                 </>
