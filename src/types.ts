@@ -41,6 +41,7 @@ export interface StarReason {
   id: number;
   stars: number;
   reason_text: string;
+  created_by?: number;
 }
 
 export interface Evaluation {

@@ -3,7 +3,7 @@ import { Plus, Trash2, Star, Edit2 } from 'lucide-react';
 import { apiFetch } from '../services/api';
 import { StarReason } from '../types';
 
-export default function Reasons() {
+export default function Reasons({ user }: { user: any }) {
   const [reasons, setReasons] = useState<StarReason[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingReason, setEditingReason] = useState<StarReason | null>(null);
@@ -33,7 +33,7 @@ export default function Reasons() {
     e.preventDefault();
     const url = editingReason ? `/api/reasons/${editingReason.id}` : '/api/reasons';
     const method = editingReason ? 'PUT' : 'POST';
-    
+
     try {
       await apiFetch(url, {
         method,
@@ -55,6 +55,10 @@ export default function Reasons() {
     }
   };
 
+  const canManage = (reason: StarReason) => {
+    return user.role === 'SUPER_ADMIN' || reason.created_by === user.id;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -62,13 +66,15 @@ export default function Reasons() {
           <h2 className="text-2xl font-bold text-slate-900">Quản lý Lý do Sao</h2>
           <p className="text-slate-500">Thiết lập các lý do tương ứng với số sao đánh giá</p>
         </div>
-        <button 
-          onClick={() => handleOpenModal()}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
-        >
-          <Plus size={18} />
-          <span>Thêm lý do</span>
-        </button>
+        {(user.role === 'SUPER_ADMIN' || user.permissions?.includes('reasons:edit')) && (
+          <button
+            onClick={() => handleOpenModal()}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
+          >
+            <Plus size={18} />
+            <span>Thêm lý do</span>
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -82,16 +88,18 @@ export default function Reasons() {
             </div>
             <div className="p-4 space-y-2">
               {reasons.filter(r => r.stars === starCount).map(reason => (
-                <div key={reason.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl group">
+                <div key={reason.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl group hover:bg-white border border-transparent hover:border-slate-200 transition-all">
                   <span className="text-sm text-slate-700">{reason.reason_text}</span>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    <button onClick={() => handleOpenModal(reason)} className="p-1 text-slate-400 hover:text-indigo-600">
-                      <Edit2 size={16} />
-                    </button>
-                    <button onClick={() => handleDelete(reason.id)} className="p-1 text-slate-400 hover:text-red-500">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+                  {canManage(reason) && (
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <button onClick={() => handleOpenModal(reason)} className="p-1 text-slate-400 hover:text-indigo-600">
+                        <Edit2 size={16} />
+                      </button>
+                      <button onClick={() => handleDelete(reason.id)} className="p-1 text-slate-400 hover:text-red-500">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
               {reasons.filter(r => r.stars === starCount).length === 0 && (
@@ -111,7 +119,7 @@ export default function Reasons() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Số sao</label>
                 <select
                   value={formData.stars}
-                  onChange={e => setFormData({...formData, stars: parseInt(e.target.value)})}
+                  onChange={e => setFormData({ ...formData, stars: parseInt(e.target.value) })}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                 >
                   <option value={1}>1 Sao</option>
@@ -126,7 +134,7 @@ export default function Reasons() {
                 <textarea
                   required
                   value={formData.reason_text}
-                  onChange={e => setFormData({...formData, reason_text: e.target.value})}
+                  onChange={e => setFormData({ ...formData, reason_text: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none min-h-[100px]"
                   placeholder="VD: Đi làm muộn, Hoàn thành xuất sắc công việc..."
                 />

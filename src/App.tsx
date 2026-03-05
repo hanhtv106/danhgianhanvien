@@ -55,7 +55,7 @@ export default function App() {
       {activeTab === 'employees' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('employees:view')) && <Employees />}
       {activeTab === 'branches' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('branches:view')) && <Branches />}
       {activeTab === 'departments' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('departments:view')) && <Departments />}
-      {activeTab === 'reasons' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('reasons:view')) && <Reasons />}
+      {activeTab === 'reasons' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('reasons:view')) && <Reasons user={user} />}
       {activeTab === 'users' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('users:view')) && <UsersPage />}
       {activeTab === 'permissions' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('users:edit')) && <Permissions />}
     </Layout>

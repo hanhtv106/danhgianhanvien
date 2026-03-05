@@ -203,20 +203,43 @@ app.delete("/api/departments/:id", authenticate, async (req, res) => {
 });
 
 app.get("/api/reasons", authenticate, async (req, res) => {
-  const { data } = await supabase.from('star_reasons').select('id, stars, reason_text');
+  const { data } = await supabase.from('star_reasons').select('id, stars, reason_text, created_by');
   res.json(data || []);
 });
 app.post("/api/reasons", authenticate, async (req, res) => {
   const { stars, reason_text } = req.body;
-  const { data } = await supabase.from('star_reasons').insert({ stars, reason_text }).select('*').single();
+  const user = (req as any).user;
+  const { data, error } = await supabase.from('star_reasons').insert({
+    stars, reason_text, created_by: user.id
+  }).select('*').single();
+  if (error) return res.status(400).json({ error: "Lỗi khi thêm lý do" });
   res.json(data);
 });
 app.put("/api/reasons/:id", authenticate, async (req, res) => {
-  await supabase.from('star_reasons').update({ stars: req.body.stars, reason_text: req.body.reason_text }).eq('id', req.params.id);
+  const user = (req as any).user;
+  const { id } = req.params;
+  const { stars, reason_text } = req.body;
+
+  const { data: reason } = await supabase.from('star_reasons').select('created_by').eq('id', id).single();
+  if (!reason) return res.status(404).json({ error: "Lý do không tồn tại" });
+  if (user.role !== 'SUPER_ADMIN' && reason.created_by !== user.id) {
+    return res.status(403).json({ error: "Bạn không có quyền sửa lý do này" });
+  }
+
+  await supabase.from('star_reasons').update({ stars, reason_text }).eq('id', id);
   res.json({ success: true });
 });
 app.delete("/api/reasons/:id", authenticate, async (req, res) => {
-  await supabase.from('star_reasons').delete().eq('id', req.params.id);
+  const user = (req as any).user;
+  const { id } = req.params;
+
+  const { data: reason } = await supabase.from('star_reasons').select('created_by').eq('id', id).single();
+  if (!reason) return res.status(404).json({ error: "Lý do không tồn tại" });
+  if (user.role !== 'SUPER_ADMIN' && reason.created_by !== user.id) {
+    return res.status(403).json({ error: "Bạn không có quyền xóa lý do này" });
+  }
+
+  await supabase.from('star_reasons').delete().eq('id', id);
   res.json({ success: true });
 });
 
