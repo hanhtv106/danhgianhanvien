@@ -308,7 +308,7 @@ app.delete("/api/employees/:id", authenticate, async (req, res) => {
 });
 
 app.get("/api/evaluations", authenticate, async (req, res) => {
-  const { date, department_id } = req.query;
+  const { date, department_id, branch_id, search } = req.query;
   try {
     let query = supabase.from('employees').select(`
       id, full_name, employee_code, is_resigned, branch_id, department_id,
@@ -316,13 +316,26 @@ app.get("/api/evaluations", authenticate, async (req, res) => {
     `).eq('is_resigned', false);
 
     const user = (req as any).user;
-    if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
+
+    // Branch filtering
+    if (user.role === 'SUPER_ADMIN') {
+      if (branch_id && branch_id !== 'all') {
+        query = query.eq('branch_id', branch_id);
+      }
+    } else if (user.branch_id) {
       query = query.eq('branch_id', user.branch_id);
     }
-    if (department_id) {
+
+    // Department filtering
+    if (department_id && department_id !== 'all') {
       query = query.eq('department_id', department_id);
     } else if (user.role === 'USER' && user.department_id) {
       query = query.eq('department_id', user.department_id);
+    }
+
+    // Search filtering
+    if (search) {
+      query = query.or(`full_name.ilike.%${search}%,employee_code.ilike.%${search}%`);
     }
 
     const { data, error } = await query;

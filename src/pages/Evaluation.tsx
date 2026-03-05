@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Star, Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Plus, Check, Save } from 'lucide-react';
+import { Star, Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Plus, Check, Save, Search, Filter } from 'lucide-react';
 import { apiFetch } from '../services/api';
-import { Evaluation, StarReason, User } from '../types';
+import { Branch, Department, Evaluation, StarReason, User } from '../types';
 import { format, subDays, addDays } from 'date-fns';
 import { cn } from '../lib/utils';
 
@@ -14,6 +14,13 @@ export default function EvaluationPage({ user }: { user: User }) {
   const [dirtyIds, setDirtyIds] = useState<Set<number>>(new Set());
   const [savingIds, setSavingIds] = useState<Set<number>>(new Set());
 
+  // Filter states
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState(user.role !== 'SUPER_ADMIN' ? (user.branch_id?.toString() || 'all') : 'all');
+  const [selectedDept, setSelectedDept] = useState('all');
+  const [searchText, setSearchText] = useState('');
+
   const dates = [
     subDays(selectedDate, 2),
     subDays(selectedDate, 1),
@@ -23,13 +30,20 @@ export default function EvaluationPage({ user }: { user: User }) {
   const fetchData = async () => {
     setLoading(true);
     try {
+      const queryParams = new URLSearchParams({
+        date: format(selectedDate, 'yyyy-MM-dd'),
+        branch_id: selectedBranch,
+        department_id: selectedDept,
+        search: searchText
+      });
+
       const [evalData, reasonData] = await Promise.all([
-        apiFetch(`/api/evaluations?date=${format(selectedDate, 'yyyy-MM-dd')}${user.role === 'USER' ? `&department_id=${user.department_id}` : ''}`),
+        apiFetch(`/api/evaluations?${queryParams.toString()}`),
         apiFetch('/api/reasons')
       ]);
       setEvaluations(evalData);
       setReasons(reasonData);
-      setDirtyIds(new Set()); // Reset dirty state on fetch
+      setDirtyIds(new Set());
     } catch (err) {
       console.error(err);
     } finally {
@@ -38,8 +52,24 @@ export default function EvaluationPage({ user }: { user: User }) {
   };
 
   useEffect(() => {
+    const fetchFilters = async () => {
+      try {
+        const [bData, dData] = await Promise.all([
+          apiFetch('/api/branches'),
+          apiFetch('/api/departments')
+        ]);
+        setBranches(bData);
+        setDepartments(dData);
+      } catch (err) {
+        console.error('Lỗi tải bộ lọc:', err);
+      }
+    };
+    fetchFilters();
+  }, []);
+
+  useEffect(() => {
     fetchData();
-  }, [selectedDate]);
+  }, [selectedDate, selectedBranch, selectedDept, searchText]);
 
   const handleStarClick = (employeeId: number, stars: number) => {
     if (!isDateAllowed(selectedDate)) return;
@@ -181,6 +211,60 @@ export default function EvaluationPage({ user }: { user: User }) {
               <span>Lưu tất cả ({dirtyIds.size})</span>
             </button>
           )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-white rounded-3xl border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+            type="text"
+            placeholder="Tìm theo tên hoặc mã..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
+          />
+        </div>
+
+        <div className="relative">
+          <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <select
+            value={selectedBranch}
+            onChange={(e) => {
+              setSelectedBranch(e.target.value);
+              setSelectedDept('all');
+            }}
+            disabled={user.role !== 'SUPER_ADMIN'}
+            className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm appearance-none disabled:opacity-60"
+          >
+            <option value="all">Tất cả chi nhánh</option>
+            {branches.map(b => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="relative">
+          <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <select
+            value={selectedDept}
+            onChange={(e) => setSelectedDept(e.target.value)}
+            className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm appearance-none"
+          >
+            <option value="all">Tất cả phòng ban</option>
+            {departments
+              .filter(d => selectedBranch === 'all' || d.branch_id?.toString() === selectedBranch)
+              .map(d => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))
+            }
+          </select>
+        </div>
+
+        <div className="flex items-center justify-center">
+          <p className="text-xs text-slate-400 font-medium">
+            Hiển thị: <span className="text-indigo-600 font-bold">{evaluations.length}</span> nhân viên
+          </p>
         </div>
       </div>
 
