@@ -118,7 +118,7 @@ export default function Dashboard() {
                     <div className="p-6 flex flex-col xl:flex-row gap-6">
                         <div className="flex-1">
                             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                <CalendarIcon className="w-4 h-4 text-slate-400" /> Top tháng trăng này
+                                <CalendarIcon className="w-4 h-4 text-slate-400" /> Top tháng này
                             </h4>
                             <div className="space-y-3">
                                 {data.top_month.map((emp: any, i: number) => (

@@ -389,6 +389,18 @@ app.post("/api/evaluations", authenticate, async (req, res) => {
   }
 });
 
+function getEmpDiffDays(created_at: string | null | undefined, filterStart: Date, filterEnd: Date, globalDiffDays: number) {
+  if (!created_at) return globalDiffDays;
+  const createdDate = new Date(created_at);
+  const empStartEvalDate = new Date(createdDate);
+  empStartEvalDate.setDate(empStartEvalDate.getDate() + 1);
+  const effectiveEmpStart = empStartEvalDate > filterStart ? empStartEvalDate : filterStart;
+  if (filterEnd >= effectiveEmpStart) {
+    return Math.ceil(Math.abs(filterEnd.getTime() - effectiveEmpStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  }
+  return 0;
+}
+
 app.get("/api/summary", authenticate, async (req, res) => {
   const { startDate, endDate } = req.query;
   const user = (req as any).user;
@@ -405,7 +417,7 @@ app.get("/api/summary", authenticate, async (req, res) => {
     }
 
     let q = supabase.from('employees').select(`
-      id, employee_code, full_name, branch_id, department_id,
+      id, employee_code, full_name, branch_id, department_id, created_at,
       departments(name), branches(name)
     `).eq('is_resigned', false);
 
@@ -437,14 +449,15 @@ app.get("/api/summary", authenticate, async (req, res) => {
     const rows = (employees || []).map((emp: any) => {
       const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
       const sumStarsDelta = evalsInRange.reduce((acc: number, cur: any) => acc + (cur.stars - 3), 0);
+      const empDiffDays = getEmpDiffDays(emp.created_at, start, effectiveEnd, diffDays);
       return {
         id: emp.id,
         employee_code: emp.employee_code,
         full_name: emp.full_name,
         department_name: emp.departments?.name,
         branch_name: emp.branches?.name,
-        total_stars: diffDays * 3 + sumStarsDelta,
-        days_evaluated: diffDays
+        total_stars: empDiffDays * 3 + sumStarsDelta,
+        days_evaluated: empDiffDays
       };
     });
     res.json(rows);
@@ -463,7 +476,7 @@ app.get("/api/summary/departments", authenticate, async (req, res) => {
     }
 
     const user = (req as any).user;
-    let query = supabase.from('departments').select('id, name, branch_id, employees(id, is_resigned)');
+    let query = supabase.from('departments').select('id, name, branch_id, employees(id, is_resigned, created_at)');
 
     if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
       query = query.eq('branch_id', user.branch_id);
@@ -494,15 +507,17 @@ app.get("/api/summary/departments", authenticate, async (req, res) => {
     const rows = data.map((dept: any) => {
       const activeEmps = (dept.employees || []).filter((e: any) => !e.is_resigned);
       let totalStarsDelta = 0;
+      let totalEmpDiffDays = 0;
       activeEmps.forEach((emp: any) => {
         const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
         totalStarsDelta += evalsInRange.reduce((a: number, c: any) => a + (c.stars - 3), 0);
+        totalEmpDiffDays += getEmpDiffDays(emp.created_at, start, effectiveEnd, diffDays);
       });
       return {
         id: dept.id,
         department_name: dept.name,
         total_employees: activeEmps.length,
-        total_stars: activeEmps.length > 0 ? (activeEmps.length * diffDays * 3 + totalStarsDelta) : 0
+        total_stars: activeEmps.length > 0 ? (totalEmpDiffDays * 3 + totalStarsDelta) : 0
       };
     });
     res.json(rows);
@@ -515,7 +530,8 @@ app.get("/api/reports/department/:id", authenticate, async (req, res) => {
   try {
     const effectiveEndDateStr = (endDate as string) > new Date().toISOString().split('T')[0] ? new Date().toISOString().split('T')[0] : (endDate as string);
     const start = new Date(startDate as string);
-    let diffDays = Math.ceil(Math.abs(new Date(effectiveEndDateStr).getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const effectiveEnd = new Date(effectiveEndDateStr);
+    let diffDays = Math.ceil(Math.abs(effectiveEnd.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
     const user = (req as any).user;
     const { data: dept } = await supabase.from('departments').select('*').eq('id', department_id).single();
@@ -528,7 +544,7 @@ app.get("/api/reports/department/:id", authenticate, async (req, res) => {
     }
 
     const { data: emps } = await supabase.from('employees')
-      .select('id, employee_code, full_name')
+      .select('id, employee_code, full_name, created_at')
       .eq('department_id', department_id).eq('is_resigned', false);
 
     let evals: any[] = [];
@@ -545,12 +561,13 @@ app.get("/api/reports/department/:id", authenticate, async (req, res) => {
     const empRows = (emps || []).map((emp: any) => {
       const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
       const sumDelta = evalsInRange.reduce((a: number, c: any) => a + (c.stars - 3), 0);
+      const empDiffDays = getEmpDiffDays(emp.created_at, start, effectiveEnd, diffDays);
       return {
         id: emp.id,
         employee_code: emp.employee_code,
         full_name: emp.full_name,
-        total_stars: diffDays * 3 + sumDelta,
-        days_evaluated: diffDays
+        total_stars: empDiffDays * 3 + sumDelta,
+        days_evaluated: empDiffDays
       };
     });
     res.json({ department: dept, employees: empRows });
@@ -683,13 +700,15 @@ app.get("/api/dashboard/overview", authenticate, async (req, res) => {
     const empScoresYear = employees?.map((emp: any) => {
       const evs = evals.filter((e: any) => e.employee_id === emp.id);
       const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: yearDiffDays * 3 + delta };
+      const empDiffDaysYear = getEmpDiffDays(emp.created_at, yearStartObj, yearEndObj, yearDiffDays);
+      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDaysYear * 3 + delta };
     }) || [];
 
     const empScoresMonth = employees?.map((emp: any) => {
       const evs = evals.filter((e: any) => e.employee_id === emp.id && e.date >= startOfMonth && e.date <= endOfMonth);
       const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: monthDiffDays * 3 + delta };
+      const empDiffDaysMonth = getEmpDiffDays(emp.created_at, monthStartObj, monthEndObj, monthDiffDays);
+      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDaysMonth * 3 + delta };
     }) || [];
 
     const top_year = empScoresYear.sort((a, b) => b.total - a.total).slice(0, 3);
