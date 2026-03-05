@@ -51,7 +51,7 @@ export default function App() {
   return (
     <Layout user={user} onLogout={handleLogout}>
       {activeTab === 'evaluation' && <EvaluationPage user={user} />}
-      {activeTab === 'reports' && <Reports />}
+      {activeTab === 'reports' && <Reports user={user} />}
       {activeTab === 'employees' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('employees:view')) && <Employees />}
       {activeTab === 'branches' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('branches:view')) && <Branches />}
       {activeTab === 'departments' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('departments:view')) && <Departments />}

@@ -146,7 +146,14 @@ app.delete("/api/users/:id", authenticate, async (req, res) => {
 });
 
 app.get("/api/branches", authenticate, async (req, res) => {
-  const { data } = await supabase.from('branches').select('*');
+  const user = (req as any).user;
+  let query = supabase.from('branches').select('*');
+
+  if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
+    query = query.eq('id', user.branch_id);
+  }
+
+  const { data } = await query;
   res.json(data || []);
 });
 app.post("/api/branches", authenticate, async (req, res) => {
@@ -354,12 +361,15 @@ app.get("/api/summary", authenticate, async (req, res) => {
     }
 
     let q = supabase.from('employees').select(`
-      id, employee_code, full_name, 
+      id, employee_code, full_name, branch_id, department_id,
       departments(name), branches(name), 
       evaluations(stars, date)
     `).eq('is_resigned', false);
 
-    if (user.role === 'MANAGER') {
+    if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
+      q = q.eq('branch_id', user.branch_id);
+    }
+    if (user.role === 'USER' && user.department_id) {
       q = q.eq('department_id', user.department_id);
     }
 
@@ -394,7 +404,17 @@ app.get("/api/summary/departments", authenticate, async (req, res) => {
       diffDays = Math.ceil(Math.abs(effectiveEnd.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     }
 
-    const { data, error } = await supabase.from('departments').select('id, name, employees(id, is_resigned, evaluations(stars, date))');
+    const user = (req as any).user;
+    let query = supabase.from('departments').select('id, name, branch_id, employees(id, is_resigned, evaluations(stars, date))');
+
+    if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
+      query = query.eq('branch_id', user.branch_id);
+    }
+    if (user.role === 'USER' && user.department_id) {
+      query = query.eq('id', user.department_id);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
 
     const rows = data.map((dept: any) => {
@@ -423,7 +443,16 @@ app.get("/api/reports/department/:id", authenticate, async (req, res) => {
     const start = new Date(startDate as string);
     let diffDays = Math.ceil(Math.abs(new Date(effectiveEndDateStr).getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
+    const user = (req as any).user;
     const { data: dept } = await supabase.from('departments').select('*').eq('id', department_id).single();
+    if (!dept) return res.status(404).json({ error: "Phòng ban không tồn tại" });
+
+    // Authorization Check
+    if (user.role !== 'SUPER_ADMIN') {
+      if (user.branch_id && dept.branch_id !== user.branch_id) return res.status(403).json({ error: "Không có quyền xem bộ phận này" });
+      if (user.role === 'USER' && user.department_id && dept.id !== user.department_id) return res.status(403).json({ error: "Không có quyền xem bộ phận này" });
+    }
+
     const { data: emps } = await supabase.from('employees')
       .select('id, employee_code, full_name, evaluations(stars, date)')
       .eq('department_id', department_id).eq('is_resigned', false);
@@ -449,7 +478,16 @@ app.get("/api/reports/employee/:id", authenticate, async (req, res) => {
   try {
     const effectiveEndDateStr = (endDate as string) > new Date().toISOString().split('T')[0] ? new Date().toISOString().split('T')[0] : (endDate as string);
 
+    const user = (req as any).user;
     const { data: empData } = await supabase.from('employees').select('*, departments(name), branches(name)').eq('id', employee_id).single();
+    if (!empData) return res.status(404).json({ error: "Nhân viên không tồn tại" });
+
+    // Authorization Check
+    if (user.role !== 'SUPER_ADMIN') {
+      if (user.branch_id && empData.branch_id !== user.branch_id) return res.status(403).json({ error: "Không có quyền xem nhân viên này" });
+      if (user.role === 'USER' && user.department_id && empData.department_id !== user.department_id) return res.status(403).json({ error: "Không có quyền xem nhân viên này" });
+    }
+
     const employee = {
       ...empData,
       department_name: empData.departments?.name,

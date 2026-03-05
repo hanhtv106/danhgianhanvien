@@ -8,7 +8,7 @@ import { cn } from '../lib/utils';
 
 type ReportView = 'EMPLOYEE' | 'DEPARTMENT';
 
-export default function Reports() {
+export default function Reports({ user }: { user: any }) {
   const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
   const [view, setView] = useState<ReportView>('EMPLOYEE');
@@ -21,8 +21,8 @@ export default function Reports() {
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
 
   // Filter states
-  const [selectedBranch, setSelectedBranch] = useState<string>('all');
-  const [selectedDept, setSelectedDept] = useState<string>('all');
+  const [selectedBranch, setSelectedBranch] = useState<string>(user.role !== 'SUPER_ADMIN' ? (user.branch_id?.toString() || 'all') : 'all');
+  const [selectedDept, setSelectedDept] = useState<string>(user.role === 'USER' ? (user.department_id?.toString() || 'all') : 'all');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('all');
   const [loading, setLoading] = useState(false);
 
@@ -318,6 +318,7 @@ export default function Reports() {
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <select
                 value={selectedBranch}
+                disabled={user.role !== 'SUPER_ADMIN'}
                 onChange={e => {
                   const newBranchId = e.target.value;
                   setSelectedBranch(newBranchId);
@@ -325,7 +326,10 @@ export default function Reports() {
                   setSelectedDept('all');
                   setSelectedEmployeeId('all');
                 }}
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className={cn(
+                  "w-full pl-10 pr-4 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20",
+                  user.role !== 'SUPER_ADMIN' ? "bg-slate-100 border-slate-200 cursor-not-allowed text-slate-500" : "bg-slate-50 border-slate-200"
+                )}
               >
                 <option value="all">Tất cả chi nhánh</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -339,11 +343,15 @@ export default function Reports() {
               <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <select
                 value={selectedDept}
+                disabled={user.role === 'USER' && !!user.department_id}
                 onChange={e => {
                   setSelectedDept(e.target.value);
                   setSelectedEmployeeId('all'); // Reset employee when department changes
                 }}
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className={cn(
+                  "w-full pl-10 pr-4 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20",
+                  (user.role === 'USER' && !!user.department_id) ? "bg-slate-100 border-slate-200 cursor-not-allowed text-slate-500" : "bg-slate-50 border-slate-200"
+                )}
               >
                 <option value="all">Tất cả phòng ban</option>
                 {departments
