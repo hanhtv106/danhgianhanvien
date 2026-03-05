@@ -21,7 +21,7 @@ export default function EvaluationPage({ user }: { user: User }) {
     setLoading(true);
     try {
       const [evalData, reasonData] = await Promise.all([
-        apiFetch(`/api/evaluations?date=${format(selectedDate, 'yyyy-MM-dd')}${user.role === 'MANAGER' ? `&department_id=${user.department_id}` : ''}`),
+        apiFetch(`/api/evaluations?date=${format(selectedDate, 'yyyy-MM-dd')}${user.role === 'USER' ? `&department_id=${user.department_id}` : ''}`),
         apiFetch('/api/reasons')
       ]);
       setEvaluations(evalData);
@@ -98,7 +98,7 @@ export default function EvaluationPage({ user }: { user: User }) {
         <div className="flex flex-col md:flex-row items-center gap-4">
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm">
-              <button 
+              <button
                 onClick={() => setSelectedDate(subDays(selectedDate, 1))}
                 className="p-2 hover:bg-slate-50 rounded-xl transition-colors"
               >
@@ -108,7 +108,7 @@ export default function EvaluationPage({ user }: { user: User }) {
                 <CalendarIcon size={18} className="text-indigo-500" />
                 <span>{format(selectedDate, 'dd/MM/yyyy')}</span>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectedDate(addDays(selectedDate, 1))}
                 className="p-2 hover:bg-slate-50 rounded-xl transition-colors"
               >
@@ -145,73 +145,73 @@ export default function EvaluationPage({ user }: { user: User }) {
                       </div>
                     </div>
 
-                      <div className="flex flex-col gap-4 flex-1 max-w-md">
-                        <div className="flex items-center justify-center gap-2">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <button
-                              key={star}
-                              disabled={!isDateAllowed(selectedDate)}
-                              onClick={() => handleStarClick(ev.employee_id, star)}
+                    <div className="flex flex-col gap-4 flex-1 max-w-md">
+                      <div className="flex items-center justify-center gap-2">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            disabled={!isDateAllowed(selectedDate)}
+                            onClick={() => handleStarClick(ev.employee_id, star)}
+                            className={cn(
+                              "p-2 rounded-xl transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed",
+                              (ev.stars || 3) >= star ? "text-amber-400" : "text-slate-200"
+                            )}
+                          >
+                            <Star size={32} fill={(ev.stars || 3) >= star ? "currentColor" : "none"} />
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Lý do đánh giá</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {reasons.filter(r => r.stars === (ev.stars || 3)).map(r => (
+                            <label
+                              key={r.id}
                               className={cn(
-                                "p-2 rounded-xl transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed",
-                                (ev.stars || 3) >= star ? "text-amber-400" : "text-slate-200"
+                                "flex items-center gap-2 p-2 rounded-xl border transition-all cursor-pointer text-sm",
+                                ev.reason_ids?.includes(r.id)
+                                  ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                                  : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"
                               )}
                             >
-                              <Star size={32} fill={(ev.stars || 3) >= star ? "currentColor" : "none"} />
-                            </button>
+                              <input
+                                type="checkbox"
+                                disabled={!isDateAllowed(selectedDate)}
+                                checked={ev.reason_ids?.includes(r.id)}
+                                onChange={() => handleReasonToggle(ev.employee_id, r.id, ev.stars || 3)}
+                                className="hidden"
+                              />
+                              <div className={cn(
+                                "w-4 h-4 rounded border flex items-center justify-center transition-colors",
+                                ev.reason_ids?.includes(r.id) ? "bg-indigo-600 border-indigo-600" : "bg-white border-slate-300"
+                              )}>
+                                {ev.reason_ids?.includes(r.id) && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                              </div>
+                              <span className="flex-1 leading-tight">{r.reason_text}</span>
+                            </label>
                           ))}
                         </div>
-
-                        <div className="space-y-2">
-                          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Lý do đánh giá</label>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {reasons.filter(r => r.stars === (ev.stars || 3)).map(r => (
-                              <label 
-                                key={r.id} 
-                                className={cn(
-                                  "flex items-center gap-2 p-2 rounded-xl border transition-all cursor-pointer text-sm",
-                                  ev.reason_ids?.includes(r.id) 
-                                    ? "bg-indigo-50 border-indigo-200 text-indigo-700" 
-                                    : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"
-                                )}
-                              >
-                                <input
-                                  type="checkbox"
-                                  disabled={!isDateAllowed(selectedDate)}
-                                  checked={ev.reason_ids?.includes(r.id)}
-                                  onChange={() => handleReasonToggle(ev.employee_id, r.id, ev.stars || 3)}
-                                  className="hidden"
-                                />
-                                <div className={cn(
-                                  "w-4 h-4 rounded border flex items-center justify-center transition-colors",
-                                  ev.reason_ids?.includes(r.id) ? "bg-indigo-600 border-indigo-600" : "bg-white border-slate-300"
-                                )}>
-                                  {ev.reason_ids?.includes(r.id) && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
-                                </div>
-                                <span className="flex-1 leading-tight">{r.reason_text}</span>
-                              </label>
-                            ))}
-                          </div>
-                          {reasons.filter(r => r.stars === (ev.stars || 3)).length === 0 && (
-                            <p className="text-xs text-slate-400 italic">Chưa có lý do mẫu cho mức {ev.stars || 3} sao</p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Trạng thái</span>
-                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600">
-                          Đã đánh giá
-                        </span>
-                        <span className="text-[10px] text-slate-400 italic">
-                          {ev.stars ? 'Đã điều chỉnh' : 'Mặc định (3 sao)'}
-                        </span>
+                        {reasons.filter(r => r.stars === (ev.stars || 3)).length === 0 && (
+                          <p className="text-xs text-slate-400 italic">Chưa có lý do mẫu cho mức {ev.stars || 3} sao</p>
+                        )}
                       </div>
                     </div>
+
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Trạng thái</span>
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600">
+                        Đã đánh giá
+                      </span>
+                      <span className="text-[10px] text-slate-400 italic">
+                        {ev.stars ? 'Đã điều chỉnh' : 'Mặc định (3 sao)'}
+                      </span>
+                    </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
+          </div>
         )}
       </div>
     </div>

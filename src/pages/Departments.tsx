@@ -10,6 +10,7 @@ export default function Departments() {
   const [name, setName] = useState('');
   const [branchId, setBranchId] = useState<string>('');
   const [branches, setBranches] = useState<any[]>([]);
+  const [filterBranchId, setFilterBranchId] = useState<string>('all');
 
   const fetchData = async () => {
     const [depts, branchData] = await Promise.all([
@@ -61,6 +62,10 @@ export default function Departments() {
     }
   };
 
+  const filteredDepartments = departments.filter(dept =>
+    filterBranchId === 'all' || dept.branch_id?.toString() === filterBranchId
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -68,13 +73,28 @@ export default function Departments() {
           <h2 className="text-2xl font-bold text-slate-900">Quản lý Phòng ban</h2>
           <p className="text-slate-500">Danh sách các phòng ban trong công ty</p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
-        >
-          <Plus size={18} />
-          <span>Thêm phòng ban</span>
-        </button>
+        <div className="flex flex-col md:flex-row items-center gap-3">
+          <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm">
+            <span className="text-slate-400 text-sm font-medium">Lọc chi nhánh:</span>
+            <select
+              value={filterBranchId}
+              onChange={(e) => setFilterBranchId(e.target.value)}
+              className="bg-transparent border-none text-sm font-semibold text-indigo-600 outline-none cursor-pointer"
+            >
+              <option value="all">Tất cả chi nhánh</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={() => handleOpenModal()}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
+          >
+            <Plus size={18} />
+            <span>Thêm phòng ban</span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm max-w-2xl">
@@ -88,7 +108,7 @@ export default function Departments() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {departments.map((dept) => (
+            {filteredDepartments.map((dept) => (
               <tr key={dept.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-6 py-4 text-sm text-slate-500">{dept.id}</td>
                 <td className="px-6 py-4 text-sm font-medium text-slate-900">{dept.name}</td>

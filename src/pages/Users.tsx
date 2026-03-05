@@ -203,8 +203,8 @@ export default function UsersPage() {
                       ...formData,
                       role_id: e.target.value,
                       role: selectedRole?.name || 'USER',
-                      department_id: (selectedRole?.name === 'SUPER_ADMIN' || selectedRole?.name === 'ADMIN') ? '' : formData.department_id,
-                      branch_id: (selectedRole?.name === 'SUPER_ADMIN' || selectedRole?.name === 'ADMIN') ? '' : formData.branch_id
+                      department_id: selectedRole?.name === 'SUPER_ADMIN' ? '' : formData.department_id,
+                      branch_id: selectedRole?.name === 'SUPER_ADMIN' ? '' : formData.branch_id
                     });
                   }}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
@@ -214,53 +214,60 @@ export default function UsersPage() {
                   {roles.map(r => <option key={r.id} value={r.id}>{r.name === 'SUPER_ADMIN' ? 'Admin' : r.name === 'ADMIN' ? 'Quản trị' : 'User'}</option>)}
                 </select>
               </div>
-              {formData.role === 'USER' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Chi nhánh</label>
-                    <select
-                      value={formData.branch_id}
-                      onChange={e => {
-                        const newBranchId = e.target.value;
-                        setFormData(prev => ({
-                          ...prev,
-                          branch_id: newBranchId,
-                          // Reset department if it doesn't belong to the new branch
-                          department_id: prev.department_id && departments.find(d => d.id.toString() === prev.department_id)?.branch_id?.toString() === newBranchId
-                            ? prev.department_id
-                            : ''
-                        }));
-                      }}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                      required
-                    >
-                      <option value="">-- Chọn chi nhánh --</option>
-                      {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
+              {String(formData.role_id) !== '1' && formData.role_id !== '' && (
+                <div className="mt-4 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="flex items-center gap-2 mb-1">
+                    <MapPin size={16} className="text-indigo-600" />
+                    <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Phạm vi Quản lý</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Phòng ban quản lý</label>
-                    <select
-                      value={formData.department_id}
-                      onChange={e => {
-                        const dept = departments.find(d => d.id.toString() === e.target.value);
-                        setFormData(prev => ({
-                          ...prev,
-                          department_id: e.target.value,
-                          branch_id: (dept as any)?.branch_id?.toString() || prev.branch_id
-                        }));
-                      }}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                      required
-                    >
-                      <option value="">-- Chọn phòng ban --</option>
-                      {departments
-                        .filter(d => !formData.branch_id || (d as any).branch_id?.toString() === formData.branch_id)
-                        .map(d => <option key={d.id} value={d.id}>{d.name}</option>)
-                      }
-                    </select>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Chi nhánh <span className="text-red-500">*</span></label>
+                      <select
+                        value={formData.branch_id}
+                        required
+                        onChange={e => {
+                          const newBranchId = e.target.value;
+                          setFormData(prev => ({
+                            ...prev,
+                            branch_id: newBranchId,
+                            department_id: prev.department_id && departments.find(d => d.id.toString() === prev.department_id)?.branch_id?.toString() === newBranchId
+                              ? prev.department_id
+                              : ''
+                          }));
+                        }}
+                        className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none shadow-sm"
+                      >
+                        <option value="">-- Chọn chi nhánh --</option>
+                        {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Phòng ban quản lý (Nếu có)</label>
+                      <select
+                        value={formData.department_id}
+                        onChange={e => {
+                          const dept = departments.find(d => d.id.toString() === e.target.value);
+                          setFormData(prev => ({
+                            ...prev,
+                            department_id: e.target.value,
+                            branch_id: (dept as any)?.branch_id?.toString() || prev.branch_id
+                          }));
+                        }}
+                        className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none shadow-sm"
+                      >
+                        <option value="">-- Không chọn (Quản lý toàn bộ chi nhánh) --</option>
+                        {departments
+                          .filter(d => !formData.branch_id || (d as any).branch_id?.toString() === formData.branch_id)
+                          .map(d => <option key={d.id} value={d.id}>{d.name}</option>)
+                        }
+                      </select>
+                      <p className="mt-1 text-[10px] text-slate-400">Nếu bỏ trống, tài khoản sẽ quản lý tất cả phòng thuộc chi nhánh đã chọn.</p>
+                    </div>
                   </div>
-                </>
+                </div>
               )}
               <div className="flex justify-end gap-3 mt-8">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2 text-slate-600 hover:bg-slate-50 rounded-xl transition-colors">Hủy</button>
