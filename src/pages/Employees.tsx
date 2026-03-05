@@ -103,29 +103,51 @@ export default function Employees() {
       const wb = XLSX.read(bstr, { type: 'binary' });
       const wsname = wb.SheetNames[0];
       const ws = wb.Sheets[wsname];
-      const data = XLSX.utils.sheet_to_json(ws);
+      const data: any[] = XLSX.utils.sheet_to_json(ws);
 
-      // Map names to IDs
-      const mappedData = data.map((row: any) => ({
-        employee_code: row['Mã nhân viên']?.toString(),
-        full_name: row['Họ tên'],
-        department_id: departments.find(d => d.name === row['Phòng ban'] || d.name === row['Bộ phận'])?.id,
-        branch_id: branches.find(b => b.name === row['Chi nhánh'])?.id,
-        cccd: row['Số CCCD']?.toString(),
-        is_resigned: row['Đã nghỉ việc'] === 'Có' || row['Đã nghỉ việc'] === true
-      })).filter(emp => emp.employee_code && emp.department_id && emp.branch_id);
+      const validRows: any[] = [];
+      const errorRows: any[] = [];
 
-      if (mappedData.length > 0) {
+      data.forEach((row: any, index) => {
+        const empCode = row['Mã nhân viên']?.toString();
+        const fullName = row['Họ tên'];
+        const deptName = row['Phòng ban'] || row['Bộ phận'];
+        const branchName = row['Chi nhánh'];
+
+        const dept = departments.find(d => d.name.trim().toLowerCase() === deptName?.toString().trim().toLowerCase());
+        const branch = branches.find(b => b.name.trim().toLowerCase() === branchName?.toString().trim().toLowerCase());
+
+        if (empCode && fullName && dept && branch) {
+          validRows.push({
+            employee_code: empCode,
+            full_name: fullName,
+            department_id: dept.id,
+            branch_id: branch.id,
+            cccd: row['Số CCCD']?.toString() || '',
+            is_resigned: row['Đã nghỉ việc'] === 'Có' || row['Đã nghỉ việc'] === true
+          });
+        } else {
+          errorRows.push({ line: index + 2, reason: !dept ? 'Phòng ban không tồn tại' : !branch ? 'Chi nhánh không tồn tại' : 'Thiếu thông tin bắt buộc' });
+        }
+      });
+
+      if (validRows.length > 0) {
         apiFetch('/api/employees/import', {
           method: 'POST',
-          body: JSON.stringify({ data: mappedData })
-        }).then(() => fetchData());
+          body: JSON.stringify({ data: validRows })
+        }).then(() => {
+          fetchData();
+          alert(`Đã import thành công ${validRows.length} nhân viên.${errorRows.length > 0 ? `\n\nCó ${errorRows.length} dòng bị lỗi và bị bỏ qua.` : ''}`);
+        });
+      } else if (errorRows.length > 0) {
+        alert('Không tìm thấy dữ liệu hợp lệ để import. Vui lòng kiểm tra lại tên Phòng ban và Chi nhánh.');
       }
     };
     reader.readAsBinaryString(file);
   };
 
   const downloadTemplate = () => {
+    // Sheet 1: Template data
     const templateData = [
       {
         'Mã nhân viên': 'NV001',
@@ -134,21 +156,25 @@ export default function Employees() {
         'Phòng ban': departments[0]?.name || 'Phòng Hành chính',
         'Chi nhánh': branches[0]?.name || 'Chi nhánh 1',
         'Đã nghỉ việc': 'Không'
-      },
-      {
-        'Mã nhân viên': 'NV002',
-        'Họ tên': 'Trần Thị B',
-        'Số CCCD': '012345678902',
-        'Phòng ban': departments[0]?.name || 'Phòng Hành chính',
-        'Chi nhánh': branches[0]?.name || 'Chi nhánh 1',
-        'Đã nghỉ việc': 'Không'
       }
     ];
 
-    const ws = XLSX.utils.json_to_sheet(templateData);
+    // Sheet 2: Reference data (Branches and Departments)
+    const branchRef = branches.map(b => ({ 'Danh sách Chi nhánh': b.name }));
+    const deptRef = departments.map(d => ({ 'Danh sách Phòng ban': d.name, 'Thuộc Chi nhánh': branches.find(b => b.id === d.branch_id)?.name }));
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template");
-    XLSX.writeFile(wb, "Mau_Import_Nhan_Vien.xlsx");
+
+    const ws1 = XLSX.utils.json_to_sheet(templateData);
+    XLSX.utils.book_append_sheet(wb, ws1, "Mau_Nhap_Lieu");
+
+    const ws2 = XLSX.utils.json_to_sheet(branchRef);
+    XLSX.utils.book_append_sheet(wb, ws2, "Chi_Nhanh_He_Thong");
+
+    const ws3 = XLSX.utils.json_to_sheet(deptRef);
+    XLSX.utils.book_append_sheet(wb, ws3, "Phong_Ban_He_Thong");
+
+    XLSX.writeFile(wb, "Mau_Import_Nhan_Vien_v2.xlsx");
   };
 
   return (
