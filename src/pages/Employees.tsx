@@ -462,9 +462,6 @@ export default function Employees() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 italic text-indigo-600 text-xs text-center">
-                  Cảm ơn bạn đã đóng góp vào hệ thống quản lý nhân sự.
-                </div>
               </div>
             </div>
 
