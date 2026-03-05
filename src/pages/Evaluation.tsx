@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Star, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Star, Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Plus, Check } from 'lucide-react';
 import { apiFetch } from '../services/api';
 import { Evaluation, StarReason, User } from '../types';
 import { format, subDays, addDays } from 'date-fns';
@@ -10,6 +10,7 @@ export default function EvaluationPage({ user }: { user: User }) {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [reasons, setReasons] = useState<StarReason[]>([]);
   const [loading, setLoading] = useState(false);
+  const [activeEmpIdForReasons, setActiveEmpIdForReasons] = useState<number | null>(null);
 
   const dates = [
     subDays(selectedDate, 2),
@@ -163,38 +164,42 @@ export default function EvaluationPage({ user }: { user: User }) {
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Lý do đánh giá</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {reasons.filter(r => r.stars === (ev.stars || 3)).map(r => (
-                            <label
-                              key={r.id}
-                              className={cn(
-                                "flex items-center gap-2 p-2 rounded-xl border transition-all cursor-pointer text-sm",
-                                ev.reason_ids?.includes(r.id)
-                                  ? "bg-indigo-50 border-indigo-200 text-indigo-700"
-                                  : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"
-                              )}
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Lý do chọn</label>
+                          {isDateAllowed(selectedDate) && (
+                            <button
+                              onClick={() => setActiveEmpIdForReasons(ev.employee_id)}
+                              className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
                             >
-                              <input
-                                type="checkbox"
-                                disabled={!isDateAllowed(selectedDate)}
-                                checked={ev.reason_ids?.includes(r.id)}
-                                onChange={() => handleReasonToggle(ev.employee_id, r.id, ev.stars || 3)}
-                                className="hidden"
-                              />
-                              <div className={cn(
-                                "w-4 h-4 rounded border flex items-center justify-center transition-colors",
-                                ev.reason_ids?.includes(r.id) ? "bg-indigo-600 border-indigo-600" : "bg-white border-slate-300"
-                              )}>
-                                {ev.reason_ids?.includes(r.id) && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
-                              </div>
-                              <span className="flex-1 leading-tight">{r.reason_text}</span>
-                            </label>
-                          ))}
+                              <Plus size={12} />
+                              <span>Chọn lý do</span>
+                            </button>
+                          )}
                         </div>
-                        {reasons.filter(r => r.stars === (ev.stars || 3)).length === 0 && (
-                          <p className="text-xs text-slate-400 italic">Chưa có lý do mẫu cho mức {ev.stars || 3} sao</p>
-                        )}
+                        <div className="flex flex-wrap gap-2">
+                          {reasons
+                            .filter(r => ev.reason_ids?.includes(r.id))
+                            .map(r => (
+                              <span
+                                key={r.id}
+                                className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-100 flex items-center gap-2"
+                              >
+                                {r.reason_text}
+                                {isDateAllowed(selectedDate) && (
+                                  <button
+                                    onClick={() => handleReasonToggle(ev.employee_id, r.id, ev.stars || 3)}
+                                    className="hover:text-indigo-900"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                )}
+                              </span>
+                            ))
+                          }
+                          {(!ev.reason_ids || ev.reason_ids.length === 0) && (
+                            <p className="text-xs text-slate-400 italic">Chưa chọn lý do</p>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -214,6 +219,77 @@ export default function EvaluationPage({ user }: { user: User }) {
           </div>
         )}
       </div>
+
+      {activeEmpIdForReasons && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 truncate max-w-[280px]">
+                  Lý do cho {evaluations.find(e => e.employee_id === activeEmpIdForReasons)?.full_name}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">Chọn các lý do tương ứng với mức {(evaluations.find(e => (e as any).employee_id === activeEmpIdForReasons) as any)?.stars || 3} sao</p>
+              </div>
+              <button
+                onClick={() => setActiveEmpIdForReasons(null)}
+                className="p-2 hover:bg-white rounded-xl transition-colors text-slate-400 hover:text-slate-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              <div className="grid grid-cols-1 gap-3">
+                {reasons
+                  .filter(r => r.stars === ((evaluations.find(e => (e as any).employee_id === activeEmpIdForReasons) as any)?.stars || 3))
+                  .map(r => {
+                    const isSelected = evaluations.find(e => (e as any).employee_id === activeEmpIdForReasons)?.reason_ids?.includes(r.id);
+                    return (
+                      <button
+                        key={r.id}
+                        onClick={() => handleReasonToggle(activeEmpIdForReasons!, r.id, (evaluations.find(e => (e as any).employee_id === activeEmpIdForReasons) as any)?.stars || 3)}
+                        className={cn(
+                          "flex items-center gap-3 p-4 rounded-2xl border text-left transition-all",
+                          isSelected
+                            ? "bg-indigo-50 border-indigo-200 ring-2 ring-indigo-500/10"
+                            : "bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-6 h-6 rounded-lg border flex items-center justify-center transition-all",
+                          isSelected ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-200" : "bg-white border-slate-300"
+                        )}>
+                          {isSelected && <Check size={14} strokeWidth={3} />}
+                        </div>
+                        <span className={cn(
+                          "flex-1 font-medium",
+                          isSelected ? "text-indigo-900" : "text-slate-700"
+                        )}>
+                          {r.reason_text}
+                        </span>
+                      </button>
+                    );
+                  })
+                }
+                {reasons.filter(r => r.stars === ((evaluations.find(e => (e as any).employee_id === activeEmpIdForReasons) as any)?.stars || 3)).length === 0 && (
+                  <div className="text-center py-10">
+                    <p className="text-slate-400 italic">Chưa có lý do mẫu cho mức này</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setActiveEmpIdForReasons(null)}
+                className="px-8 py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95"
+              >
+                Hoàn tất
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
