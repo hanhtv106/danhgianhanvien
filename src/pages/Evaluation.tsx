@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Star, Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Plus, Check } from 'lucide-react';
+import { Star, Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Plus, Check, Save } from 'lucide-react';
 import { apiFetch } from '../services/api';
 import { Evaluation, StarReason, User } from '../types';
 import { format, subDays, addDays } from 'date-fns';
@@ -11,6 +11,8 @@ export default function EvaluationPage({ user }: { user: User }) {
   const [reasons, setReasons] = useState<StarReason[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeEmpIdForReasons, setActiveEmpIdForReasons] = useState<number | null>(null);
+  const [dirtyIds, setDirtyIds] = useState<Set<number>>(new Set());
+  const [savingIds, setSavingIds] = useState<Set<number>>(new Set());
 
   const dates = [
     subDays(selectedDate, 2),
@@ -27,6 +29,7 @@ export default function EvaluationPage({ user }: { user: User }) {
       ]);
       setEvaluations(evalData);
       setReasons(reasonData);
+      setDirtyIds(new Set()); // Reset dirty state on fetch
     } catch (err) {
       console.error(err);
     } finally {
@@ -38,44 +41,87 @@ export default function EvaluationPage({ user }: { user: User }) {
     fetchData();
   }, [selectedDate]);
 
-  const handleStarClick = async (employeeId: number, stars: number) => {
-    const currentEval = evaluations.find(ev => ev.employee_id === employeeId);
+  const handleStarClick = (employeeId: number, stars: number) => {
+    if (!isDateAllowed(selectedDate)) return;
+
+    setEvaluations(prev => prev.map(ev =>
+      ev.employee_id === employeeId ? { ...ev, stars } : ev
+    ));
+    setDirtyIds(prev => new Set(prev).add(employeeId));
+  };
+
+  const handleReasonToggle = (employeeId: number, reasonId: number, stars: number) => {
+    if (!isDateAllowed(selectedDate)) return;
+
+    setEvaluations(prev => prev.map(ev => {
+      if (ev.employee_id === employeeId) {
+        const currentReasons = ev.reason_ids || [];
+        const newReasons = currentReasons.includes(reasonId)
+          ? currentReasons.filter(id => id !== reasonId)
+          : [...currentReasons, reasonId];
+        return { ...ev, reason_ids: newReasons, stars };
+      }
+      return ev;
+    }));
+    setDirtyIds(prev => new Set(prev).add(employeeId));
+  };
+
+  const handleSave = async (employeeId: number) => {
+    const ev = evaluations.find(e => e.employee_id === employeeId);
+    if (!ev) return;
+
+    setSavingIds(prev => new Set(prev).add(employeeId));
     try {
       await apiFetch('/api/evaluations', {
         method: 'POST',
         body: JSON.stringify({
           employee_id: employeeId,
           date: format(selectedDate, 'yyyy-MM-dd'),
-          stars,
-          reason_ids: currentEval?.reason_ids || []
+          stars: ev.stars || 3,
+          reason_ids: ev.reason_ids || []
         })
       });
-      fetchData();
+      setDirtyIds(prev => {
+        const next = new Set(prev);
+        next.delete(employeeId);
+        return next;
+      });
     } catch (err) {
-      alert('Lỗi khi đánh giá');
+      alert('Lỗi khi lưu đánh giá');
+    } finally {
+      setSavingIds(prev => {
+        const next = new Set(prev);
+        next.delete(employeeId);
+        return next;
+      });
     }
   };
 
-  const handleReasonToggle = async (employeeId: number, reasonId: number, stars: number) => {
-    const currentEval = evaluations.find(ev => ev.employee_id === employeeId);
-    const currentReasons = currentEval?.reason_ids || [];
-    const newReasons = currentReasons.includes(reasonId)
-      ? currentReasons.filter(id => id !== reasonId)
-      : [...currentReasons, reasonId];
+  const handleSaveAll = async () => {
+    const ids = Array.from(dirtyIds);
+    if (ids.length === 0) return;
 
+    setLoading(true);
     try {
-      await apiFetch('/api/evaluations', {
-        method: 'POST',
-        body: JSON.stringify({
-          employee_id: employeeId,
-          date: format(selectedDate, 'yyyy-MM-dd'),
-          stars,
-          reason_ids: newReasons
-        })
-      });
-      fetchData();
+      await Promise.all(ids.map(id => {
+        const ev = evaluations.find(e => e.employee_id === id);
+        if (!ev) return Promise.resolve();
+        return apiFetch('/api/evaluations', {
+          method: 'POST',
+          body: JSON.stringify({
+            employee_id: id,
+            date: format(selectedDate, 'yyyy-MM-dd'),
+            stars: ev.stars || 3,
+            reason_ids: ev.reason_ids || []
+          })
+        });
+      }));
+      setDirtyIds(new Set());
+      fetchData(); // Refresh to be safe
     } catch (err) {
-      alert('Lỗi khi cập nhật lý do');
+      alert('Lỗi khi lưu tất cả đánh giá');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -120,6 +166,21 @@ export default function EvaluationPage({ user }: { user: User }) {
               <p className="text-xs text-red-500 font-medium text-center">Chỉ được đánh giá hôm nay và 2 ngày trước</p>
             )}
           </div>
+
+          {dirtyIds.size > 0 && isDateAllowed(selectedDate) && (
+            <button
+              onClick={handleSaveAll}
+              disabled={loading}
+              className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 animate-in slide-in-from-right-4 duration-300"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Save size={18} />
+              )}
+              <span>Lưu tất cả ({dirtyIds.size})</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -203,14 +264,41 @@ export default function EvaluationPage({ user }: { user: User }) {
                       </div>
                     </div>
 
-                    <div className="flex flex-col items-end gap-1">
-                      <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Trạng thái</span>
-                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600">
-                        Đã đánh giá
-                      </span>
-                      <span className="text-[10px] text-slate-400 italic">
-                        {ev.stars ? 'Đã điều chỉnh' : 'Mặc định (3 sao)'}
-                      </span>
+                    <div className="flex flex-col items-center justify-center gap-3 min-w-[120px]">
+                      <div className="flex flex-col items-end gap-1 w-full">
+                        <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Trạng thái</span>
+                        {dirtyIds.has(ev.employee_id) ? (
+                          <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-600 animate-pulse">
+                            Chưa lưu
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600">
+                            Đã lưu
+                          </span>
+                        )}
+                      </div>
+
+                      {isDateAllowed(selectedDate) && (
+                        <button
+                          onClick={() => handleSave(ev.employee_id)}
+                          disabled={!dirtyIds.has(ev.employee_id) || savingIds.has(ev.employee_id)}
+                          className={cn(
+                            "w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold transition-all",
+                            dirtyIds.has(ev.employee_id)
+                              ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100 active:scale-95"
+                              : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                          )}
+                        >
+                          {savingIds.has(ev.employee_id) ? (
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              <Save size={18} />
+                              <span>Lưu lại</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
