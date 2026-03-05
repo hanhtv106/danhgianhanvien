@@ -16,7 +16,8 @@ import {
   MapPin,
   AlertCircle,
   Eye,
-  EyeOff
+  EyeOff,
+  LayoutDashboard
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { User } from '../types';
@@ -43,6 +44,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const menuItems = [
+    { icon: LayoutDashboard, label: 'Tổng quan', path: 'dashboard', permission: 'evaluations:view' }, // Cùng quyền xem với màn đánh giá
     { icon: Star, label: 'Đánh giá', path: 'evaluation', permission: 'evaluations:view' },
     { icon: BarChart3, label: 'Báo cáo', path: 'reports', permission: 'reports:view' },
     { icon: Users, label: 'Nhân viên', path: 'employees', permission: 'employees:view' },
@@ -57,7 +59,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
     user.role === 'SUPER_ADMIN' || user.permissions?.includes(item.permission)
   );
 
-  const [activeTab, setActiveTab] = useState(filteredMenu[0]?.path || 'evaluation');
+  const [activeTab, setActiveTab] = useState(filteredMenu[0]?.path || 'dashboard');
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('tabChange', { detail: activeTab }));

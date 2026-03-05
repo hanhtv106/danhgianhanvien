@@ -599,6 +599,116 @@ app.get("/api/reports/employee/:id", authenticate, async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Lỗi chi tiết nhân viên" }); }
 });
 
+// Dashboard
+app.get("/api/dashboard/overview", authenticate, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    // We fetch everything and process in JS since sqlite/supabase aggregations can be tricky with auth filters if not using views.
+    let qEmps = supabase.from('employees')
+      .select('id, full_name, branch_id, department_id, branches(name), departments(name)')
+      .eq('is_resigned', false);
+
+    if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
+      qEmps = qEmps.eq('branch_id', user.branch_id);
+    }
+    if (user.role === 'USER' && user.department_id) {
+      qEmps = qEmps.eq('department_id', user.department_id);
+    }
+
+    const { data: employees, error: eErr } = await qEmps;
+    if (eErr) throw eErr;
+
+    const total_employees = employees?.length || 0;
+
+    // Branches & Departments count (from the employees view to ensure RBAC limits)
+    const branchSet = new Set();
+    const deptSet = new Set();
+    const branchBreakdown: Record<string, number> = {};
+    const deptBreakdown: Record<string, number> = {};
+
+    employees?.forEach((e: any) => {
+      if (e.branch_id) {
+        branchSet.add(e.branch_id);
+        const bName = e.branches?.name || 'Chưa xếp nhánh';
+        branchBreakdown[bName] = (branchBreakdown[bName] || 0) + 1;
+      }
+      if (e.department_id) {
+        deptSet.add(e.department_id);
+        const dName = e.departments?.name || 'Chưa xếp phòng';
+        deptBreakdown[dName] = (deptBreakdown[dName] || 0) + 1;
+      }
+    });
+
+    // Evaluations for the current year
+    const startOfYear = `${currentYear}-01-01`;
+    const endOfYear = `${currentYear}-12-31`;
+    const startOfMonth = `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`;
+
+    // Determine the last day of the current month
+    const nextMonth = new Date(currentYear, currentMonth, 1);
+    const lastDayOfMonth = new Date(nextMonth.getTime() - 1);
+    const endOfMonth = lastDayOfMonth.toISOString().split('T')[0];
+
+    let evals: any[] = [];
+    if (employees && employees.length > 0) {
+      const empIds = employees.map((e: any) => e.id);
+      const { data: evData } = await supabase.from('evaluations')
+        .select('employee_id, stars, date')
+        .in('employee_id', empIds)
+        .gte('date', startOfYear)
+        .lte('date', endOfYear);
+      evals = evData || [];
+    }
+
+    // Calculate diff days for month and year up to today
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Year diff days
+    const yearStartObj = new Date(startOfYear);
+    const yearEndObj = todayStr > endOfYear ? new Date(endOfYear) : new Date(todayStr);
+    const yearDiffDays = Math.ceil((yearEndObj.getTime() - yearStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    // Month diff days
+    const monthStartObj = new Date(startOfMonth);
+    const monthEndObj = todayStr > endOfMonth ? new Date(endOfMonth) : new Date(todayStr);
+    let monthDiffDays = 0;
+    if (monthEndObj >= monthStartObj) {
+      monthDiffDays = Math.ceil((monthEndObj.getTime() - monthStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    }
+
+    const empScoresYear = employees?.map((emp: any) => {
+      const evs = evals.filter((e: any) => e.employee_id === emp.id);
+      const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
+      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: yearDiffDays * 3 + delta };
+    }) || [];
+
+    const empScoresMonth = employees?.map((emp: any) => {
+      const evs = evals.filter((e: any) => e.employee_id === emp.id && e.date >= startOfMonth && e.date <= endOfMonth);
+      const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
+      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: monthDiffDays * 3 + delta };
+    }) || [];
+
+    const top_year = empScoresYear.sort((a, b) => b.total - a.total).slice(0, 3);
+    const top_month = empScoresMonth.sort((a, b) => b.total - a.total).slice(0, 3);
+
+    res.json({
+      total_branches: branchSet.size,
+      total_departments: deptSet.size,
+      total_employees,
+      branch_breakdown: Object.entries(branchBreakdown).map(([name, count]) => ({ name, count })),
+      department_breakdown: Object.entries(deptBreakdown).map(([name, count]) => ({ name, count })),
+      top_year,
+      top_month
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Lỗi lấy dữ liệu tổng quan" });
+  }
+});
+
 // RBAC Management
 app.get("/api/roles", authenticate, async (req, res) => {
   try {

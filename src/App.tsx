@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Login from './pages/Login';
 import Layout from './components/Layout';
+import Dashboard from './pages/Dashboard';
 import EvaluationPage from './pages/Evaluation';
 import Reports from './pages/Reports';
 import Employees from './pages/Employees';
@@ -13,7 +14,7 @@ import { User } from './types';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState('evaluation');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
 
   const handleLogout = () => {
@@ -77,6 +78,7 @@ export default function App() {
 
   return (
     <Layout user={user} onLogout={handleLogout}>
+      {activeTab === 'dashboard' && <Dashboard />}
       {activeTab === 'evaluation' && <EvaluationPage user={user} />}
       {activeTab === 'reports' && <Reports user={user} />}
       {activeTab === 'employees' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('employees:view')) && <Employees />}
