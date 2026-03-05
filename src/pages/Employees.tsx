@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Download, Upload, MapPin } from 'lucide-react';
+import { Plus, Trash2, Edit2, Download, Upload, MapPin, Building2, User, CreditCard, Calendar, ShieldCheck, History, X } from 'lucide-react';
 import { apiFetch } from '../services/api';
 import { Employee, Department, Branch } from '../types';
 import * as XLSX from 'xlsx';
@@ -229,27 +229,42 @@ export default function Employees() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {employees.map((emp) => (
-                <tr key={emp.id} className="hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => handleViewDetail(emp)}>
-                  <td className="px-6 py-4 text-sm text-slate-600 font-mono">{emp.employee_code}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-slate-900">{emp.full_name}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{emp.branch_name}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{emp.department_name}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{emp.cccd}</td>
+                <tr key={emp.id} className="hover:bg-indigo-50/30 transition-all cursor-pointer group border-b border-slate-100 last:border-0" onClick={() => handleViewDetail(emp)}>
+                  <td className="px-6 py-4">
+                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg font-mono">{emp.employee_code}</span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="font-semibold text-slate-900">{emp.full_name}</div>
+                    <div className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter sm:hidden">{emp.branch_name}</div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    <div className="flex items-center gap-1.5">
+                      <MapPin size={14} className="text-slate-400" />
+                      {emp.branch_name}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    <div className="flex items-center gap-1.5">
+                      <Building2 size={14} className="text-slate-400" />
+                      {emp.department_name}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-500 font-mono italic">{emp.cccd}</td>
                   <td className="px-6 py-4 text-sm">
                     <span className={cn(
-                      "px-2.5 py-1 rounded-full text-xs font-medium",
-                      emp.is_resigned ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"
+                      "px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider",
+                      emp.is_resigned ? "bg-red-50 text-red-600 border border-red-100" : "bg-emerald-50 text-emerald-600 border border-emerald-100"
                     )}>
-                      {emp.is_resigned ? 'Đã nghỉ việc' : 'Đang làm việc'}
+                      {emp.is_resigned ? 'Nghỉ việc' : 'Đang làm'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => handleOpenModal(emp)} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors">
-                        <Edit2 size={18} />
+                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => handleOpenModal(emp)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">
+                        <Edit2 size={16} />
                       </button>
-                      <button onClick={() => handleDelete(emp.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors">
-                        <Trash2 size={18} />
+                      <button onClick={() => handleDelete(emp.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </td>
@@ -365,109 +380,125 @@ export default function Employees() {
         </div>
       )}
       {isDetailModalOpen && selectedEmployee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl w-full max-w-2xl p-8 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-2 bg-indigo-600"></div>
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-2xl font-bold text-slate-900">Chi tiết nhân viên</h3>
-              <button onClick={() => setIsDetailModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <Plus className="rotate-45" size={24} />
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] w-full max-w-2xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300">
+            {/* Header with Background Gradient */}
+            <div className="h-32 bg-gradient-to-r from-indigo-600 to-indigo-400 relative">
+              <button
+                onClick={() => setIsDetailModalOpen(false)}
+                className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 text-white rounded-full transition-all backdrop-blur-sm z-10"
+              >
+                <X size={20} />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-sm">
-              <div className="space-y-6">
-                <div>
-                  <p className="text-slate-400 font-bold uppercase tracking-wider text-xs mb-1">Thông tin cơ bản</p>
-                  <div className="bg-slate-50 p-4 rounded-2xl space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 text-sm">Mã nhân viên:</span>
-                      <span className="font-bold text-slate-900">{selectedEmployee.employee_code}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 text-sm">Họ và tên:</span>
-                      <span className="font-bold text-slate-900">{selectedEmployee.full_name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 text-sm">Số CCCD:</span>
-                      <span className="font-bold text-slate-900">{selectedEmployee.cccd}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-slate-400 font-bold uppercase tracking-wider text-xs mb-1">Công tác</p>
-                  <div className="bg-slate-50 p-4 rounded-2xl space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 text-sm">Chi nhánh:</span>
-                      <span className="font-bold text-slate-900">{selectedEmployee.branch_name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 text-sm">Phòng ban:</span>
-                      <span className="font-bold text-slate-900">{selectedEmployee.department_name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 text-sm">Trạng thái:</span>
-                      <span className={cn("font-bold", selectedEmployee.is_resigned ? "text-red-500" : "text-emerald-500")}>
-                        {selectedEmployee.is_resigned ? 'Đã nghỉ việc' : 'Đang làm việc'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-slate-400 font-bold uppercase tracking-wider text-xs mb-1">Thành tích (Số sao)</p>
-                  <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 grid grid-cols-3 gap-2">
-                    <div className="text-center">
-                      <p className="text-[10px] text-amber-600 font-bold uppercase truncate">Tháng này</p>
-                      <p className="text-lg font-black text-amber-700">{selectedEmployee.stars_month || 0}</p>
-                    </div>
-                    <div className="border-x border-amber-200 text-center px-1">
-                      <p className="text-[10px] text-amber-600 font-bold uppercase truncate">Năm 2026</p>
-                      <p className="text-lg font-black text-amber-700">{selectedEmployee.stars_year || 0}</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-[10px] text-amber-600 font-bold uppercase truncate">Tổng</p>
-                      <p className="text-lg font-black text-amber-700">{selectedEmployee.stars_all_time || 0}</p>
-                    </div>
-                  </div>
+            {/* Profile Avatar Overlay */}
+            <div className="px-8 -mt-12 relative z-10 flex items-end gap-6">
+              <div className="w-24 h-24 bg-white p-1 rounded-3xl shadow-xl">
+                <div className="w-full h-full bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600 font-black text-3xl">
+                  {selectedEmployee.full_name?.split(' ').pop()?.charAt(0) || 'E'}
                 </div>
               </div>
-
-              <div className="space-y-6">
-                <div>
-                  <p className="text-slate-400 font-bold uppercase tracking-wider text-xs mb-1">Dữ liệu hệ thống</p>
-                  <div className="bg-slate-50 p-4 rounded-2xl space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 text-sm">Ngày tạo:</span>
-                      <span className="font-medium text-slate-900">
-                        {selectedEmployee.created_at ? new Date(selectedEmployee.created_at).toLocaleDateString('vi-VN') : '---'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 text-sm">Người tạo:</span>
-                      <span className="font-medium text-indigo-600">{selectedEmployee.created_by_name || 'Hệ thống'}</span>
-                    </div>
-                    <hr className="border-slate-200" />
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 text-sm">Lần sửa cuối:</span>
-                      <span className="font-medium text-slate-900">
-                        {selectedEmployee.updated_at ? new Date(selectedEmployee.updated_at).toLocaleDateString('vi-VN') : 'Chưa sửa'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 text-sm">Người sửa:</span>
-                      <span className="font-medium text-indigo-600">{selectedEmployee.updated_by_name || '---'}</span>
-                    </div>
-                  </div>
+              <div className="mb-2">
+                <h3 className="text-2xl font-black text-slate-900">{selectedEmployee.full_name}</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100">{selectedEmployee.employee_code}</span>
+                  <span className={cn(
+                    "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border",
+                    selectedEmployee.is_resigned ? "bg-red-50 text-red-500 border-red-100" : "bg-emerald-50 text-emerald-500 border-emerald-100"
+                  )}>
+                    {selectedEmployee.is_resigned ? 'Nghỉ việc' : 'Đang làm việc'}
+                  </span>
                 </div>
-
               </div>
             </div>
 
-            <div className="mt-8 flex justify-end">
-              <button onClick={() => setIsDetailModalOpen(false)} className="px-8 py-3 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 transition-all font-bold">
-                Đóng
+            <div className="p-8 overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Left Column: Core Info */}
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
+                      <User size={14} className="text-indigo-400" /> Thông tin cơ bản
+                    </h4>
+                    <div className="bg-slate-50/50 rounded-2xl p-4 space-y-3 border border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 flex items-center gap-2"><CreditCard size={14} /> CCCD:</span>
+                        <span className="font-bold text-slate-700">{selectedEmployee.cccd}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 flex items-center gap-2"><MapPin size={14} /> Chi nhánh:</span>
+                        <span className="font-bold text-slate-700">{selectedEmployee.branch_name}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 flex items-center gap-2"><Building2 size={14} /> Phòng ban:</span>
+                        <span className="font-bold text-slate-700">{selectedEmployee.department_name}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
+                      <ShieldCheck size={14} className="text-amber-500" /> Điểm đánh giá (Stars)
+                    </h4>
+                    <div className="bg-amber-50/30 rounded-2xl p-4 border border-amber-100 grid grid-cols-3 gap-2">
+                      <div className="text-center">
+                        <p className="text-[10px] text-amber-500 font-bold uppercase">Tháng</p>
+                        <p className="text-xl font-black text-amber-600">{selectedEmployee.stars_month || 0}</p>
+                      </div>
+                      <div className="text-center border-x border-amber-100">
+                        <p className="text-[10px] text-amber-500 font-bold uppercase">Năm 2026</p>
+                        <p className="text-xl font-black text-amber-600">{selectedEmployee.stars_year || 0}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[10px] text-amber-500 font-bold uppercase">Tổng</p>
+                        <p className="text-xl font-black text-amber-600">{selectedEmployee.stars_all_time || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: System Info */}
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
+                      <History size={14} className="text-slate-400" /> Nhật ký hệ thống
+                    </h4>
+                    <div className="bg-slate-50/50 rounded-2xl p-4 space-y-4 border border-slate-100">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-1 p-1.5 bg-indigo-50 text-indigo-500 rounded-lg"><Plus size={12} /></div>
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">Ngày gia nhập hệ thống</p>
+                          <p className="text-sm font-semibold text-slate-700">
+                            {selectedEmployee.created_at ? new Date(selectedEmployee.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '---'}
+                          </p>
+                          <p className="text-[11px] text-indigo-400 font-medium whitespace-nowrap overflow-hidden text-ellipsis">Bởi: {selectedEmployee.created_by_name || 'Hệ thống'}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3 pt-4 border-t border-slate-100">
+                        <div className="mt-1 p-1.5 bg-amber-50 text-amber-500 rounded-lg"><Edit2 size={12} /></div>
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">Cập nhật lần cuối</p>
+                          <p className="text-sm font-semibold text-slate-700">
+                            {selectedEmployee.updated_at ? new Date(selectedEmployee.updated_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '---'}
+                          </p>
+                          <p className="text-[11px] text-amber-500/70 font-medium whitespace-nowrap overflow-hidden text-ellipsis">Người sửa: {selectedEmployee.updated_by_name || '---'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button
+                onClick={() => setIsDetailModalOpen(false)}
+                className="px-10 py-3 bg-slate-900 text-white rounded-2xl hover:bg-indigo-600 transition-all font-black text-sm shadow-lg shadow-slate-200"
+              >
+                Xác nhận
               </button>
             </div>
           </div>
