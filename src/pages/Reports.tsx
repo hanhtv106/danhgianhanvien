@@ -12,14 +12,14 @@ export default function Reports() {
   const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
   const [view, setView] = useState<ReportView>('EMPLOYEE');
-  
+
   // Data states
   const [employeeData, setEmployeeData] = useState<any[]>([]);
   const [departmentData, setDepartmentData] = useState<any[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
-  
+
   // Filter states
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedDept, setSelectedDept] = useState<string>('all');
@@ -61,7 +61,7 @@ export default function Reports() {
   const fetchDetailData = async (type: 'EMPLOYEE' | 'DEPARTMENT', id: number) => {
     setDetailLoading(true);
     try {
-      const endpoint = type === 'EMPLOYEE' 
+      const endpoint = type === 'EMPLOYEE'
         ? `/api/reports/employee/${id}?startDate=${startDate}&endDate=${endDate}`
         : `/api/reports/department/${id}?startDate=${startDate}&endDate=${endDate}`;
       const result = await apiFetch(endpoint);
@@ -75,7 +75,7 @@ export default function Reports() {
 
   useEffect(() => {
     fetchData();
-    
+
     const handleClickOutside = (event: MouseEvent) => {
       if (empDropdownRef.current && !empDropdownRef.current.contains(event.target as Node)) {
         setIsEmpDropdownOpen(false);
@@ -107,10 +107,13 @@ export default function Reports() {
     })
     .sort((a, b) => (b.total_stars || 0) - (a.total_stars || 0));
 
-  const filteredEmployeesForFilter = allEmployees.filter(emp => 
-    emp.full_name.toLowerCase().includes(empSearchQuery.toLowerCase()) ||
-    emp.employee_code.toLowerCase().includes(empSearchQuery.toLowerCase())
-  );
+  const filteredEmployeesForFilter = allEmployees.filter(emp => {
+    const matchSearch = emp.full_name.toLowerCase().includes(empSearchQuery.toLowerCase()) ||
+      emp.employee_code.toLowerCase().includes(empSearchQuery.toLowerCase());
+    const matchBranch = selectedBranch === 'all' || emp.branch_id?.toString() === selectedBranch;
+    const matchDept = selectedDept === 'all' || emp.department_id?.toString() === selectedDept;
+    return matchSearch && matchBranch && matchDept;
+  });
 
   const selectedEmployeeForFilter = allEmployees.find(emp => emp.id.toString() === selectedEmployeeId);
 
@@ -144,7 +147,7 @@ export default function Reports() {
   if (detailView && detailData) {
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
-        <button 
+        <button
           onClick={() => { setDetailView(null); setDetailData(null); }}
           className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors font-medium"
         >
@@ -249,8 +252,8 @@ export default function Reports() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {detailData.employees.map((emp: any) => (
-                      <tr 
-                        key={emp.id} 
+                      <tr
+                        key={emp.id}
                         className="hover:bg-slate-50 transition-colors cursor-pointer"
                         onClick={() => { setDetailView({ type: 'EMPLOYEE', id: emp.id }); setDetailData(null); }}
                       >
@@ -279,20 +282,20 @@ export default function Reports() {
         </div>
         <div className="flex items-center gap-3">
           <div className="bg-slate-100 p-1 rounded-2xl flex">
-            <button 
+            <button
               onClick={() => setView('EMPLOYEE')}
               className={cn("px-4 py-2 rounded-xl text-sm font-bold transition-all", view === 'EMPLOYEE' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700")}
             >
               Nhân viên
             </button>
-            <button 
+            <button
               onClick={() => setView('DEPARTMENT')}
               className={cn("px-4 py-2 rounded-xl text-sm font-bold transition-all", view === 'DEPARTMENT' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700")}
             >
               Phòng ban
             </button>
           </div>
-          <button 
+          <button
             onClick={exportToExcel}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
           >
@@ -313,9 +316,15 @@ export default function Reports() {
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Chi nhánh</label>
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <select 
+              <select
                 value={selectedBranch}
-                onChange={e => setSelectedBranch(e.target.value)}
+                onChange={e => {
+                  const newBranchId = e.target.value;
+                  setSelectedBranch(newBranchId);
+                  // Reset department and employee when branch changes
+                  setSelectedDept('all');
+                  setSelectedEmployeeId('all');
+                }}
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
               >
                 <option value="all">Tất cả chi nhánh</option>
@@ -328,20 +337,26 @@ export default function Reports() {
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Phòng ban</label>
             <div className="relative">
               <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <select 
+              <select
                 value={selectedDept}
-                onChange={e => setSelectedDept(e.target.value)}
+                onChange={e => {
+                  setSelectedDept(e.target.value);
+                  setSelectedEmployeeId('all'); // Reset employee when department changes
+                }}
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
               >
                 <option value="all">Tất cả phòng ban</option>
-                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                {departments
+                  .filter(d => selectedBranch === 'all' || d.branch_id?.toString() === selectedBranch)
+                  .map(d => <option key={d.id} value={d.id}>{d.name}</option>)
+                }
               </select>
             </div>
           </div>
 
           <div className="space-y-2 relative" ref={empDropdownRef}>
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Nhân viên</label>
-            <div 
+            <div
               onClick={() => setIsEmpDropdownOpen(!isEmpDropdownOpen)}
               className="relative cursor-pointer"
             >
@@ -366,12 +381,12 @@ export default function Reports() {
                   />
                 </div>
                 <div className="max-h-48 overflow-y-auto">
-                  <div 
+                  <div
                     onClick={() => { setSelectedEmployeeId('all'); setIsEmpDropdownOpen(false); }}
                     className="px-4 py-2 text-xs hover:bg-slate-50 cursor-pointer"
                   >Tất cả nhân viên</div>
                   {filteredEmployeesForFilter.map(emp => (
-                    <div 
+                    <div
                       key={emp.id}
                       onClick={() => { setSelectedEmployeeId(emp.id.toString()); setIsEmpDropdownOpen(false); }}
                       className="px-4 py-2 text-xs hover:bg-slate-50 cursor-pointer flex flex-col"
@@ -389,9 +404,9 @@ export default function Reports() {
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Từ ngày</label>
             <div className="relative">
               <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input 
-                type="date" 
-                value={startDate} 
+              <input
+                type="date"
+                value={startDate}
                 onChange={e => setStartDate(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
@@ -402,9 +417,9 @@ export default function Reports() {
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Đến ngày</label>
             <div className="relative">
               <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input 
-                type="date" 
-                value={endDate} 
+              <input
+                type="date"
+                value={endDate}
                 onChange={e => setEndDate(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
@@ -447,8 +462,8 @@ export default function Reports() {
                 <tr><td colSpan={8} className="px-6 py-20 text-center text-slate-400">Không có dữ liệu</td></tr>
               ) : (
                 (view === 'EMPLOYEE' ? filteredEmployeeData : filteredDepartmentData).map((row, index) => (
-                  <tr 
-                    key={row.id} 
+                  <tr
+                    key={row.id}
                     className="hover:bg-slate-50 transition-colors cursor-pointer"
                     onClick={() => setDetailView({ type: view, id: row.id })}
                   >
