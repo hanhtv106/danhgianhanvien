@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Download, Upload, MapPin, Building2, User, CreditCard, Calendar, ShieldCheck, History, X } from 'lucide-react';
+import { Plus, Trash2, Edit2, Download, Upload, MapPin, Building2, User, CreditCard, Calendar, ShieldCheck, History, X, Check } from 'lucide-react';
 import { apiFetch } from '../services/api';
 import { Employee, Department, Branch } from '../types';
 import * as XLSX from 'xlsx';
+import { cn } from '../lib/utils';
 
 export default function Employees() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -18,8 +19,15 @@ export default function Employees() {
     department_id: '',
     branch_id: '',
     cccd: '',
-    is_resigned: false
+    is_resigned: false,
+    created_at: new Date().toISOString().split('T')[0]
   });
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const fetchData = async () => {
     const [empData, deptData, branchData] = await Promise.all([
@@ -45,7 +53,8 @@ export default function Employees() {
         department_id: emp.department_id.toString(),
         branch_id: emp.branch_id.toString(),
         cccd: emp.cccd,
-        is_resigned: emp.is_resigned
+        is_resigned: emp.is_resigned,
+        created_at: emp.created_at ? new Date(emp.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
       });
     } else {
       setEditingEmployee(null);
@@ -55,7 +64,8 @@ export default function Employees() {
         department_id: departments[0]?.id.toString() || '',
         branch_id: branches[0]?.id.toString() || '',
         cccd: '',
-        is_resigned: false
+        is_resigned: false,
+        created_at: new Date().toISOString().split('T')[0]
       });
     }
     setIsModalOpen(true);
@@ -87,15 +97,21 @@ export default function Employees() {
       });
       setIsModalOpen(false);
       fetchData();
+      showToast(editingEmployee ? 'Cập nhật nhân viên thành công!' : 'Thêm nhân viên thành công!');
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message, 'error');
     }
   };
 
   const handleDelete = async (id: number) => {
     if (confirm('Bạn có chắc chắn muốn xóa nhân viên này?')) {
-      await apiFetch(`/api/employees/${id}`, { method: 'DELETE' });
-      fetchData();
+      try {
+        await apiFetch(`/api/employees/${id}`, { method: 'DELETE' });
+        fetchData();
+        showToast('Đã xóa nhân viên thành công!');
+      } catch (err: any) {
+        showToast('Lỗi khi xóa nhân viên', 'error');
+      }
     }
   };
 
@@ -282,7 +298,7 @@ export default function Employees() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Mã nhân viên</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Mã nhân viên <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     required
@@ -292,7 +308,7 @@ export default function Employees() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Họ tên</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Họ tên <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     required
@@ -304,7 +320,7 @@ export default function Employees() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Chi nhánh</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Chi nhánh <span className="text-red-500">*</span></label>
                   <select
                     value={formData.branch_id}
                     onChange={e => {
@@ -325,7 +341,7 @@ export default function Employees() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Phòng ban</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Phòng ban <span className="text-red-500">*</span></label>
                   <select
                     value={formData.department_id}
                     onChange={e => {
@@ -348,7 +364,7 @@ export default function Employees() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Số CCCD</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Số CCCD <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     required
@@ -357,20 +373,30 @@ export default function Employees() {
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                   />
                 </div>
-                {editingEmployee && (
-                  <div className="flex items-end pb-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.is_resigned}
-                        onChange={e => setFormData({ ...formData, is_resigned: e.target.checked })}
-                        className="w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
-                      />
-                      <span className="text-sm font-medium text-slate-700">Đã nghỉ việc</span>
-                    </label>
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Ngày gia nhập <span className="text-red-500">*</span></label>
+                  <input
+                    type="date"
+                    required
+                    value={formData.created_at}
+                    onChange={e => setFormData({ ...formData, created_at: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                  />
+                </div>
               </div>
+              {editingEmployee && (
+                <div className="flex items-center pb-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_resigned}
+                      onChange={e => setFormData({ ...formData, is_resigned: e.target.checked })}
+                      className="w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">Đã nghỉ việc</span>
+                  </label>
+                </div>
+              )}
               <div className="flex justify-end gap-3 mt-8">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2 text-slate-600 hover:bg-slate-50 rounded-xl transition-colors">Hủy</button>
                 <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors">Lưu</button>
@@ -504,10 +530,16 @@ export default function Employees() {
           </div>
         </div>
       )}
+      {/* Toast Notification */}
+      {toast && (
+        <div className={cn(
+          "fixed bottom-8 right-8 z-[100] px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-right-5 duration-300",
+          toast.type === 'success' ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
+        )}>
+          {toast.type === 'success' ? <Check size={20} /> : <X size={20} />}
+          <span className="font-bold text-sm tracking-wide">{toast.message}</span>
+        </div>
+      )}
     </div>
   );
-}
-
-function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(' ');
 }

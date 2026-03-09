@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { LogIn, User, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { apiFetch } from '../services/api';
+import Logo from '../components/Logo';
 
 interface LoginProps {
   onLogin: (user: any, token: string) => void;
@@ -38,10 +39,10 @@ export default function Login({ onLogin }: LoginProps) {
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-8 md:p-10">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 text-indigo-600 rounded-2xl mb-4">
-            <LogIn size={32} />
+          <div className="flex justify-center mb-8">
+            <Logo className="w-full max-w-[300px] h-20" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Chào mừng trở lại</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Hệ thống Đánh giá</h1>
           <p className="text-slate-500 mt-2">Đăng nhập để quản lý đánh giá nhân viên</p>
         </div>
 

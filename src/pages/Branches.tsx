@@ -37,7 +37,7 @@ export default function Branches() {
     e.preventDefault();
     const url = editingBranch ? `/api/branches/${editingBranch.id}` : '/api/branches';
     const method = editingBranch ? 'PUT' : 'POST';
-    
+
     try {
       await apiFetch(url, {
         method,
@@ -68,7 +68,7 @@ export default function Branches() {
           <h2 className="text-2xl font-bold text-slate-900">Quản lý Chi nhánh</h2>
           <p className="text-slate-500">Danh sách các chi nhánh của công ty</p>
         </div>
-        <button 
+        <button
           onClick={() => handleOpenModal()}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
         >
@@ -118,7 +118,7 @@ export default function Branches() {
             <h3 className="text-xl font-bold mb-6">{editingBranch ? 'Sửa chi nhánh' : 'Thêm chi nhánh mới'}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tên chi nhánh</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Tên chi nhánh <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   required

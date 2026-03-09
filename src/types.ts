@@ -57,5 +57,6 @@ export interface Evaluation {
   employee_code: string;
   stars: number | null;
   reason_ids: number[];
+  note?: string;
   date: string;
 }

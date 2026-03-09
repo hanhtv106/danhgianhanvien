@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Star, Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Plus, Check, Save, Search, Filter } from 'lucide-react';
+import { Star, Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Plus, Check, Save, Search, Filter, RotateCcw, MessageSquare } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { apiFetch } from '../services/api';
 import { Branch, Department, Evaluation, StarReason, User } from '../types';
 import { format, subDays, addDays } from 'date-fns';
@@ -8,11 +9,19 @@ import { cn } from '../lib/utils';
 export default function EvaluationPage({ user }: { user: User }) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
+  const [originalEvaluations, setOriginalEvaluations] = useState<Evaluation[]>([]);
   const [reasons, setReasons] = useState<StarReason[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeEmpIdForReasons, setActiveEmpIdForReasons] = useState<number | null>(null);
+  const [tempEvaluation, setTempEvaluation] = useState<Evaluation | null>(null);
   const [dirtyIds, setDirtyIds] = useState<Set<number>>(new Set());
   const [savingIds, setSavingIds] = useState<Set<number>>(new Set());
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   // Filter states
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -20,12 +29,6 @@ export default function EvaluationPage({ user }: { user: User }) {
   const [selectedBranch, setSelectedBranch] = useState(user.role !== 'SUPER_ADMIN' ? (user.branch_id?.toString() || 'all') : 'all');
   const [selectedDept, setSelectedDept] = useState('all');
   const [searchText, setSearchText] = useState('');
-
-  const dates = [
-    subDays(selectedDate, 2),
-    subDays(selectedDate, 1),
-    selectedDate
-  ];
 
   const fetchData = async () => {
     setLoading(true);
@@ -41,7 +44,39 @@ export default function EvaluationPage({ user }: { user: User }) {
         apiFetch(`/api/evaluations?${queryParams.toString()}`),
         apiFetch('/api/reasons')
       ]);
-      setEvaluations(evalData);
+      const processedEvals = await Promise.all(evalData.map(async (ev: Evaluation) => {
+        if (ev.stars === null && isDateAllowed(selectedDate)) {
+          const firstThreeStarReason = reasonData.find((r: StarReason) => r.stars === 3);
+          const autoValue = {
+            ...ev,
+            stars: 3,
+            reason_ids: firstThreeStarReason ? [firstThreeStarReason.id] : [],
+            note: ""
+          };
+
+          // Gọi API tự động lưu ngay lập tức
+          try {
+            await apiFetch('/api/evaluations', {
+              method: 'POST',
+              body: JSON.stringify({
+                employee_id: autoValue.employee_id,
+                date: format(selectedDate, 'yyyy-MM-dd'),
+                stars: autoValue.stars,
+                reason_ids: autoValue.reason_ids,
+                note: autoValue.note
+              })
+            });
+            return autoValue;
+          } catch (err) {
+            console.error("Tự động lưu thất bại:", err);
+            return autoValue; // Vẫn trả về giá trị mặc định ở client
+          }
+        }
+        return ev;
+      }));
+
+      setEvaluations(processedEvals);
+      setOriginalEvaluations(JSON.parse(JSON.stringify(processedEvals)));
       setReasons(reasonData);
       setDirtyIds(new Set());
     } catch (err) {
@@ -74,31 +109,59 @@ export default function EvaluationPage({ user }: { user: User }) {
   const handleStarClick = (employeeId: number, stars: number) => {
     if (!isDateAllowed(selectedDate)) return;
 
-    setEvaluations(prev => prev.map(ev =>
-      ev.employee_id === employeeId ? { ...ev, stars } : ev
-    ));
-    setDirtyIds(prev => new Set(prev).add(employeeId));
-  };
+    const currentEv = evaluations.find(e => e.employee_id === employeeId);
+    if (!currentEv) return;
 
-  const handleReasonToggle = (employeeId: number, reasonId: number, stars: number) => {
-    if (!isDateAllowed(selectedDate)) return;
+    const shouldClear = currentEv.stars !== stars;
+    let newReasonIds = shouldClear ? [] : (currentEv.reason_ids || []);
+    let newNote = shouldClear ? "" : (currentEv.note || "");
 
-    setEvaluations(prev => prev.map(ev => {
-      if (ev.employee_id === employeeId) {
-        const currentReasons = ev.reason_ids || [];
-        const newReasons = currentReasons.includes(reasonId)
-          ? currentReasons.filter(id => id !== reasonId)
-          : [...currentReasons, reasonId];
-        return { ...ev, reason_ids: newReasons, stars };
+    if (stars === 3 && shouldClear) {
+      const firstThreeStarReason = reasons.find(r => r.stars === 3);
+      if (firstThreeStarReason) {
+        newReasonIds = [firstThreeStarReason.id];
       }
-      return ev;
-    }));
-    setDirtyIds(prev => new Set(prev).add(employeeId));
+    }
+
+    setTempEvaluation({ ...currentEv, stars, reason_ids: newReasonIds, note: newNote });
+    setActiveEmpIdForReasons(employeeId);
   };
 
-  const handleSave = async (employeeId: number) => {
-    const ev = evaluations.find(e => e.employee_id === employeeId);
-    if (!ev) return;
+  const handleReasonToggle = (reasonId: number) => {
+    if (!tempEvaluation) return;
+
+    const currentReasons = tempEvaluation.reason_ids || [];
+    const newReasons = currentReasons.includes(reasonId)
+      ? currentReasons.filter(id => id !== reasonId)
+      : [...currentReasons, reasonId];
+
+    setTempEvaluation({ ...tempEvaluation, reason_ids: newReasons });
+  };
+
+  const handleNoteChange = (note: string) => {
+    if (!tempEvaluation) return;
+    setTempEvaluation({ ...tempEvaluation, note });
+  };
+
+  const handleTempStarClick = (stars: number) => {
+    if (!tempEvaluation) return;
+
+    const shouldClear = tempEvaluation.stars !== stars;
+    let newReasonIds = shouldClear ? [] : (tempEvaluation.reason_ids || []);
+    let newNote = tempEvaluation.note || ""; // Keep note when changing stars
+
+    if (stars === 3 && shouldClear) {
+      const firstThreeStarReason = reasons.find(r => r.stars === 3);
+      if (firstThreeStarReason) {
+        newReasonIds = [firstThreeStarReason.id];
+      }
+    }
+    setTempEvaluation({ ...tempEvaluation, stars, reason_ids: newReasonIds, note: newNote });
+  };
+
+  const handleSave = async () => {
+    if (!tempEvaluation) return;
+    const employeeId = tempEvaluation.employee_id;
 
     setSavingIds(prev => new Set(prev).add(employeeId));
     try {
@@ -107,17 +170,28 @@ export default function EvaluationPage({ user }: { user: User }) {
         body: JSON.stringify({
           employee_id: employeeId,
           date: format(selectedDate, 'yyyy-MM-dd'),
-          stars: ev.stars || 3,
-          reason_ids: ev.reason_ids || []
+          stars: tempEvaluation.stars || 3,
+          reason_ids: tempEvaluation.reason_ids || [],
+          note: tempEvaluation.note || ""
         })
       });
+
+      setEvaluations(prev => prev.map(ev =>
+        ev.employee_id === employeeId ? { ...tempEvaluation } : ev
+      ));
+      setOriginalEvaluations(prev => prev.map(original =>
+        original.employee_id === employeeId ? { ...tempEvaluation } : original
+      ));
       setDirtyIds(prev => {
         const next = new Set(prev);
         next.delete(employeeId);
         return next;
       });
+      showToast('Đã lưu đánh giá thành công!');
+      setActiveEmpIdForReasons(null);
+      setTempEvaluation(null);
     } catch (err) {
-      alert('Lỗi khi lưu đánh giá');
+      showToast('Lỗi khi lưu đánh giá. Vui lòng thử lại.', 'error');
     } finally {
       setSavingIds(prev => {
         const next = new Set(prev);
@@ -127,32 +201,18 @@ export default function EvaluationPage({ user }: { user: User }) {
     }
   };
 
-  const handleSaveAll = async () => {
-    const ids = Array.from(dirtyIds);
-    if (ids.length === 0) return;
+  const handleCancel = (employeeId: number) => {
+    const original = originalEvaluations.find(e => e.employee_id === employeeId);
+    if (!original) return;
 
-    setLoading(true);
-    try {
-      await Promise.all(ids.map(id => {
-        const ev = evaluations.find(e => e.employee_id === id);
-        if (!ev) return Promise.resolve();
-        return apiFetch('/api/evaluations', {
-          method: 'POST',
-          body: JSON.stringify({
-            employee_id: id,
-            date: format(selectedDate, 'yyyy-MM-dd'),
-            stars: ev.stars || 3,
-            reason_ids: ev.reason_ids || []
-          })
-        });
-      }));
-      setDirtyIds(new Set());
-      fetchData(); // Refresh to be safe
-    } catch (err) {
-      alert('Lỗi khi lưu tất cả đánh giá');
-    } finally {
-      setLoading(false);
-    }
+    setEvaluations(prev => prev.map(ev =>
+      ev.employee_id === employeeId ? { ...original } : ev
+    ));
+    setDirtyIds(prev => {
+      const next = new Set(prev);
+      next.delete(employeeId);
+      return next;
+    });
   };
 
   const isDateAllowed = (date: Date) => {
@@ -164,6 +224,8 @@ export default function EvaluationPage({ user }: { user: User }) {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays >= 0 && diffDays <= 2;
   };
+
+  const activeEvaluation = evaluations.find(e => e.employee_id === activeEmpIdForReasons);
 
   return (
     <div className="space-y-6">
@@ -196,21 +258,6 @@ export default function EvaluationPage({ user }: { user: User }) {
               <p className="text-xs text-red-500 font-medium text-center">Chỉ được đánh giá hôm nay và 2 ngày trước</p>
             )}
           </div>
-
-          {dirtyIds.size > 0 && isDateAllowed(selectedDate) && (
-            <button
-              onClick={handleSaveAll}
-              disabled={loading}
-              className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 animate-in slide-in-from-right-4 duration-300"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Save size={18} />
-              )}
-              <span>Lưu tất cả ({dirtyIds.size})</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -268,198 +315,239 @@ export default function EvaluationPage({ user }: { user: User }) {
         </div>
       </div>
 
-      <div className="space-y-8">
-        {loading ? (
-          <div className="text-center py-20 text-slate-400">Đang tải dữ liệu...</div>
-        ) : evaluations.length === 0 ? (
-          <div className="text-center py-20 text-slate-400 bg-white rounded-3xl border border-dashed border-slate-300">
-            Không có nhân viên nào để đánh giá
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              {evaluations.map((ev: any) => (
-                <div key={ev.employee_id} className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center font-bold text-lg">
-                        {ev.full_name.charAt(0)}
+      <div className="relative overflow-hidden min-h-[400px]">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={format(selectedDate, 'yyyy-MM-dd')}
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -50 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.2}
+            onDragEnd={(_, info) => {
+              const swipeThreshold = 50;
+              if (info.offset.x < -swipeThreshold) {
+                setSelectedDate(prev => addDays(prev, 1));
+              } else if (info.offset.x > swipeThreshold) {
+                setSelectedDate(prev => subDays(prev, 1));
+              }
+            }}
+            className="space-y-4 cursor-grab active:cursor-grabbing"
+          >
+            {loading ? (
+              <div className="text-center py-20 text-slate-400">Đang tải dữ liệu...</div>
+            ) : evaluations.length === 0 ? (
+              <div className="text-center py-20 text-slate-400 bg-white rounded-3xl border border-dashed border-slate-300">
+                Không có nhân viên nào để đánh giá
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                {evaluations.map((ev) => (
+                  <div key={ev.employee_id} className="bg-white rounded-2xl border border-slate-200 p-3 md:p-6 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-6">
+                      <div className="flex items-center gap-3 md:w-64 shrink-0">
+                        <div className="w-10 h-10 md:w-12 md:h-12 bg-indigo-100 text-indigo-600 rounded-xl md:rounded-2xl flex items-center justify-center font-bold text-base md:text-lg shrink-0">
+                          {ev.full_name?.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-slate-900 text-sm md:text-base truncate">{ev.full_name}</h4>
+                          <p className="text-xs text-slate-500 font-mono truncate">{ev.employee_code}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-bold text-slate-900">{ev.full_name}</h4>
-                        <p className="text-sm text-slate-500 font-mono">{ev.employee_code}</p>
-                      </div>
-                    </div>
 
-                    <div className="flex flex-col gap-4 flex-1 max-w-md">
-                      <div className="flex items-center justify-center gap-2">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <button
-                            key={star}
-                            disabled={!isDateAllowed(selectedDate)}
-                            onClick={() => handleStarClick(ev.employee_id, star)}
-                            className={cn(
-                              "p-2 rounded-xl transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed",
-                              (ev.stars || 3) >= star ? "text-amber-400" : "text-slate-200"
-                            )}
-                          >
-                            <Star size={32} fill={(ev.stars || 3) >= star ? "currentColor" : "none"} />
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Lý do chọn</label>
-                          {isDateAllowed(selectedDate) && (
+                      <div className="flex flex-1 items-center justify-center min-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-0.5 md:gap-2 bg-slate-50/50 p-1 rounded-2xl md:bg-transparent md:p-0">
+                          {[1, 2, 3, 4, 5].map((star) => (
                             <button
-                              onClick={() => setActiveEmpIdForReasons(ev.employee_id)}
-                              className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                              key={star}
+                              disabled={!isDateAllowed(selectedDate)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStarClick(ev.employee_id, star);
+                              }}
+                              className={cn(
+                                "p-1 md:p-1.5 rounded-lg transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed",
+                                (ev.stars || 0) >= star ? "text-amber-400" : "text-slate-200"
+                              )}
                             >
-                              <Plus size={12} />
-                              <span>Chọn lý do</span>
+                              <Star size={32} className="md:w-11 md:h-11" fill={(ev.stars || 0) >= star ? "currentColor" : "none"} />
                             </button>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {reasons
-                            .filter(r => ev.reason_ids?.includes(r.id))
-                            .map(r => (
-                              <span
-                                key={r.id}
-                                className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-100 flex items-center gap-2"
-                              >
-                                {r.reason_text}
-                                {isDateAllowed(selectedDate) && (
-                                  <button
-                                    onClick={() => handleReasonToggle(ev.employee_id, r.id, ev.stars || 3)}
-                                    className="hover:text-indigo-900"
-                                  >
-                                    <X size={12} />
-                                  </button>
-                                )}
-                              </span>
-                            ))
-                          }
-                          {(!ev.reason_ids || ev.reason_ids.length === 0) && (
-                            <p className="text-xs text-slate-400 italic">Chưa chọn lý do</p>
-                          )}
+                          ))}
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex flex-col items-center justify-center gap-3 min-w-[120px]">
-                      <div className="flex flex-col items-end gap-1 w-full">
-                        <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Trạng thái</span>
-                        {dirtyIds.has(ev.employee_id) ? (
-                          <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-600 animate-pulse">
-                            Chưa lưu
-                          </span>
-                        ) : (
-                          <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600">
-                            Đã lưu
-                          </span>
-                        )}
-                      </div>
-
-                      {isDateAllowed(selectedDate) && (
-                        <button
-                          onClick={() => handleSave(ev.employee_id)}
-                          disabled={!dirtyIds.has(ev.employee_id) || savingIds.has(ev.employee_id)}
-                          className={cn(
-                            "w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold transition-all",
-                            dirtyIds.has(ev.employee_id)
-                              ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100 active:scale-95"
-                              : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                          )}
-                        >
-                          {savingIds.has(ev.employee_id) ? (
-                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          ) : (
-                            <>
-                              <Save size={18} />
-                              <span>Lưu lại</span>
-                            </>
-                          )}
-                        </button>
-                      )}
+                      <div className="hidden md:block md:w-64"></div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+                ))}
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      {activeEmpIdForReasons && (
+      {activeEmpIdForReasons && tempEvaluation && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div>
                 <h3 className="text-xl font-bold text-slate-900 truncate max-w-[280px]">
-                  Lý do cho {evaluations.find(e => e.employee_id === activeEmpIdForReasons)?.full_name}
+                  Đánh giá {tempEvaluation.full_name}
                 </h3>
-                <p className="text-xs text-slate-500 font-medium">Chọn các lý do tương ứng với mức {(evaluations.find(e => (e as any).employee_id === activeEmpIdForReasons) as any)?.stars || 3} sao</p>
+                <div className="flex items-center gap-1 mt-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => handleTempStarClick(star)}
+                      className={cn(
+                        "transition-all transform hover:scale-110",
+                        (tempEvaluation.stars || 0) >= star ? "text-amber-400" : "text-slate-200"
+                      )}
+                    >
+                      <Star size={20} fill={(tempEvaluation.stars || 0) >= star ? "currentColor" : "none"} />
+                    </button>
+                  ))}
+                </div>
               </div>
               <button
-                onClick={() => setActiveEmpIdForReasons(null)}
+                onClick={() => {
+                  setActiveEmpIdForReasons(null);
+                  setTempEvaluation(null);
+                }}
                 className="p-2 hover:bg-white rounded-xl transition-colors text-slate-400 hover:text-slate-600"
               >
                 <X size={24} />
               </button>
             </div>
 
-            <div className="p-6 max-h-[60vh] overflow-y-auto">
-              <div className="grid grid-cols-1 gap-3">
-                {reasons
-                  .filter(r => r.stars === ((evaluations.find(e => (e as any).employee_id === activeEmpIdForReasons) as any)?.stars || 3))
-                  .map(r => {
-                    const isSelected = evaluations.find(e => (e as any).employee_id === activeEmpIdForReasons)?.reason_ids?.includes(r.id);
-                    return (
+            <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
+              {/* Lý do đã chọn */}
+              <section className="space-y-3">
+                <label className="text-sm font-bold text-indigo-700 flex items-center gap-2">
+                  <Check size={18} className="text-indigo-600" />
+                  Lý do đã chọn ({(tempEvaluation.reason_ids || []).length})
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {reasons
+                    .filter(r => r.stars === (tempEvaluation.stars || 3) && tempEvaluation.reason_ids?.includes(r.id))
+                    .map(r => (
                       <button
                         key={r.id}
-                        onClick={() => handleReasonToggle(activeEmpIdForReasons!, r.id, (evaluations.find(e => (e as any).employee_id === activeEmpIdForReasons) as any)?.stars || 3)}
-                        className={cn(
-                          "flex items-center gap-3 p-4 rounded-2xl border text-left transition-all",
-                          isSelected
-                            ? "bg-indigo-50 border-indigo-200 ring-2 ring-indigo-500/10"
-                            : "bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50"
-                        )}
+                        onClick={() => handleReasonToggle(r.id)}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
                       >
-                        <div className={cn(
-                          "w-6 h-6 rounded-lg border flex items-center justify-center transition-all",
-                          isSelected ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-200" : "bg-white border-slate-300"
-                        )}>
-                          {isSelected && <Check size={14} strokeWidth={3} />}
+                        {r.reason_text}
+                        <X size={14} />
+                      </button>
+                    ))
+                  }
+                  {(!tempEvaluation.reason_ids || tempEvaluation.reason_ids.length === 0) && (
+                    <p className="text-xs text-slate-400 italic py-1">Chưa chọn lý do nào</p>
+                  )}
+                </div>
+              </section>
+
+              {/* Phân cách giữa lý do đã chọn và lý do mẫu */}
+              <div className="relative py-2 flex items-center">
+                <div className="flex-grow border-t border-slate-100"></div>
+                <span className="flex-shrink mx-4 text-[10px] uppercase font-bold text-slate-300 tracking-[0.2em]">Gợi ý từ hệ thống</span>
+                <div className="flex-grow border-t border-slate-100"></div>
+              </div>
+
+              {/* Danh sách lý do mẫu */}
+              <section className="space-y-3">
+                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <Plus size={18} className="text-slate-400" />
+                  Danh sách lý do mẫu <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-1 gap-2">
+                  {reasons
+                    .filter(r => r.stars === (tempEvaluation.stars || 3) && !tempEvaluation.reason_ids?.includes(r.id))
+                    .map(r => (
+                      <button
+                        key={r.id}
+                        onClick={() => handleReasonToggle(r.id)}
+                        className="flex items-center gap-3 p-4 rounded-2xl border border-slate-200 bg-white text-left transition-all hover:border-indigo-300 hover:bg-slate-50"
+                      >
+                        <div className="w-6 h-6 rounded-lg border border-slate-300 bg-white flex items-center justify-center transition-all">
+                          {/* Empty box for available selection */}
                         </div>
-                        <span className={cn(
-                          "flex-1 font-medium",
-                          isSelected ? "text-indigo-900" : "text-slate-700"
-                        )}>
+                        <span className="flex-1 font-medium text-slate-700">
                           {r.reason_text}
                         </span>
                       </button>
-                    );
-                  })
-                }
-                {reasons.filter(r => r.stars === ((evaluations.find(e => (e as any).employee_id === activeEmpIdForReasons) as any)?.stars || 3)).length === 0 && (
-                  <div className="text-center py-10">
-                    <p className="text-slate-400 italic">Chưa có lý do mẫu cho mức này</p>
-                  </div>
-                )}
-              </div>
+                    ))
+                  }
+                  {reasons.filter(r => r.stars === (tempEvaluation.stars || 3) && !tempEvaluation.reason_ids?.includes(r.id)).length === 0 && (
+                    <div className="text-center py-4 border border-dashed border-slate-200 rounded-2xl">
+                      <p className="text-slate-400 text-xs italic">Đã chọn tất cả lý do hoặc không có lý do phù hợp</p>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <label className="text-sm font-bold text-slate-700 flex items-center gap-2 font-['Inter']">
+                  <MessageSquare size={18} className="text-indigo-600" />
+                  Ý kiến bổ sung (Tùy chọn)
+                </label>
+                <textarea
+                  placeholder="Nhập thêm nhận xét của bạn tại đây..."
+                  value={tempEvaluation.note || ""}
+                  onChange={(e) => handleNoteChange(e.target.value)}
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm min-h-[100px] resize-none"
+                />
+              </section>
             </div>
 
-            <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
-              <button
-                onClick={() => setActiveEmpIdForReasons(null)}
-                className="px-8 py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95"
-              >
-                Hoàn tất
-              </button>
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex flex-col gap-3">
+              {(tempEvaluation.stars !== null && (!tempEvaluation.reason_ids || tempEvaluation.reason_ids.length === 0)) && (
+                <p className="text-xs text-red-500 font-medium italic text-right">Vui lòng chọn ít nhất một lý do mẫu</p>
+              )}
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    setActiveEmpIdForReasons(null);
+                    setTempEvaluation(null);
+                  }}
+                  className="flex-1 py-4 rounded-2xl font-bold bg-white border-2 border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95"
+                >
+                  Huỷ bỏ
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={savingIds.has(tempEvaluation.employee_id) || (tempEvaluation.stars !== null && (!tempEvaluation.reason_ids || tempEvaluation.reason_ids.length === 0))}
+                  className={cn(
+                    "flex-[2] py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 text-white shadow-lg active:scale-95",
+                    (tempEvaluation.stars === null || (tempEvaluation.reason_ids && tempEvaluation.reason_ids.length > 0))
+                      ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200"
+                      : "bg-slate-300 cursor-not-allowed shadow-none"
+                  )}
+                >
+                  {savingIds.has(tempEvaluation.employee_id) ? (
+                    <RotateCcw className="animate-spin" size={20} />
+                  ) : (
+                    <>
+                      <Save size={20} />
+                      <span>Xác nhận Lưu</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
+        </div>
+      )}
+      {/* Toast Notification */}
+      {toast && (
+        <div className={cn(
+          "fixed bottom-8 right-8 z-[100] px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-right-5 duration-300",
+          toast.type === 'success' ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
+        )}>
+          {toast.type === 'success' ? <Check size={20} /> : <X size={20} />}
+          <span className="font-bold text-sm tracking-wide">{toast.message}</span>
         </div>
       )}
     </div>

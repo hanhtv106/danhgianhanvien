@@ -162,7 +162,7 @@ export default function UsersPage() {
             <h3 className="text-xl font-bold mb-6">{editingUser ? 'Sửa tài khoản' : 'Thêm tài khoản mới'}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tên đăng nhập</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Tên đăng nhập <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   required
@@ -173,7 +173,7 @@ export default function UsersPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Mật khẩu {editingUser && '(Để trống nếu không đổi)'}
+                  Mật khẩu {editingUser ? '(Để trống nếu không đổi)' : <span className="text-red-500">*</span>}
                 </label>
                 <input
                   type="password"
@@ -184,7 +184,7 @@ export default function UsersPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Họ tên</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Họ tên <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   required
@@ -194,7 +194,7 @@ export default function UsersPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Vai trò</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Vai trò <span className="text-red-500">*</span></label>
                 <select
                   value={formData.role_id}
                   onChange={e => {

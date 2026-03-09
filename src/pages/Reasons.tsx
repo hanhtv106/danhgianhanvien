@@ -116,7 +116,7 @@ export default function Reasons({ user }: { user: any }) {
             <h3 className="text-xl font-bold mb-6">{editingReason ? 'Sửa lý do đánh giá' : 'Thêm lý do đánh giá'}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Số sao</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Số sao <span className="text-red-500">*</span></label>
                 <select
                   value={formData.stars}
                   onChange={e => setFormData({ ...formData, stars: parseInt(e.target.value) })}
@@ -130,7 +130,7 @@ export default function Reasons({ user }: { user: any }) {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nội dung lý do</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nội dung lý do <span className="text-red-500">*</span></label>
                 <textarea
                   required
                   value={formData.reason_text}

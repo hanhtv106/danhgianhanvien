@@ -139,7 +139,7 @@ export default function Departments() {
             <h3 className="text-xl font-bold mb-6">{editingDept ? 'Sửa phòng ban' : 'Thêm phòng ban mới'}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tên phòng ban</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Tên phòng ban <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   required
@@ -150,7 +150,7 @@ export default function Departments() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Chi nhánh</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Chi nhánh <span className="text-red-500">*</span></label>
                 <select
                   required
                   value={branchId}
