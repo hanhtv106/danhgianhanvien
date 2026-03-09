@@ -20,12 +20,24 @@ const app = express();
 app.use(express.json({ limit: "50mb" }));
 
 // Auth Middleware
-const authenticate = (req: any, res: any, next: any) => {
+const authenticate = async (req: any, res: any, next: any) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: "No token provided" });
   const token = authHeader.split(" ")[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded: any = jwt.verify(token, JWT_SECRET);
+
+    // Check if this token is still valid (not replaced by a newer login)
+    const { data: userData, error } = await supabase
+      .from('users')
+      .select('current_token')
+      .eq('id', decoded.id)
+      .single();
+
+    if (error || !userData || userData.current_token !== token) {
+      return res.status(401).json({ error: "Phiên đăng nhập đã hết hạn hoặc được đăng nhập ở nơi khác" });
+    }
+
     req.user = decoded;
     next();
   } catch (err) {
@@ -62,6 +74,10 @@ app.post("/api/login", async (req, res) => {
     };
 
     const token = jwt.sign(user, JWT_SECRET);
+
+    // Store the latest token to enforce single-device login
+    await supabase.from('users').update({ current_token: token }).eq('id', userData.id);
+
     res.json({ token, user });
   } catch (err) {
     console.error("Login route error:", err);
@@ -420,7 +436,7 @@ app.get("/api/evaluations", authenticate, async (req, res) => {
     if (employees && employees.length > 0) {
       const empIds = employees.map((e: any) => e.id);
       const { data: evData } = await supabase.from('evaluations')
-        .select('id, employee_id, stars, date, evaluation_reasons_junction (reason_id)')
+        .select('id, employee_id, stars, date, note, evaluation_reasons_junction (reason_id)')
         .in('employee_id', empIds)
         .eq('date', date);
       evals = evData || [];
@@ -434,7 +450,8 @@ app.get("/api/evaluations", authenticate, async (req, res) => {
         employee_code: emp.employee_code,
         stars: ev?.stars || null,
         date: ev?.date || null,
-        reason_ids: ev?.evaluation_reasons_junction?.map((r: any) => r.reason_id) || []
+        reason_ids: ev?.evaluation_reasons_junction?.map((r: any) => r.reason_id) || [],
+        note: ev?.note || ""
       };
     });
     res.json(processedRows);
@@ -444,19 +461,23 @@ app.get("/api/evaluations", authenticate, async (req, res) => {
 });
 
 app.post("/api/evaluations", authenticate, async (req, res) => {
-  const { employee_id, date, stars, reason_ids } = req.body;
+  const { employee_id, date, stars, reason_ids, note } = req.body;
   const evaluator_id = (req as any).user.id;
   try {
-    const { data: evData, error: evError } = await supabase.from('evaluations').upsert({
-      employee_id, date, stars, evaluator_id
-    }, { onConflict: 'employee_id,date' }).select('id').single();
+    const updateObj = { employee_id, date, stars, evaluator_id, note };
+    const { data: evData, error: evError } = await supabase.from('evaluations')
+      .upsert(updateObj, { onConflict: 'employee_id,date' })
+      .select('id');
 
     if (evError) throw evError;
 
-    await supabase.from('evaluation_reasons_junction').delete().eq('evaluation_id', evData.id);
+    const firstId = evData && evData.length > 0 ? evData[0].id : null;
+    if (!firstId) throw new Error("Could not get evaluation ID after upsert");
+
+    await supabase.from('evaluation_reasons_junction').delete().eq('evaluation_id', firstId);
 
     if (Array.isArray(reason_ids) && reason_ids.length > 0) {
-      const junctions = reason_ids.map(rid => ({ evaluation_id: evData.id, reason_id: rid }));
+      const junctions = reason_ids.map(rid => ({ evaluation_id: firstId, reason_id: rid }));
       await supabase.from('evaluation_reasons_junction').insert(junctions);
     }
     res.json({ success: true });
