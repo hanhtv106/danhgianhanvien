@@ -491,15 +491,27 @@ app.post("/api/evaluations", authenticate, async (req, res) => {
 });
 
 function getEmpDiffDays(created_at: string | null | undefined, filterStart: Date, filterEnd: Date, globalDiffDays: number) {
-  if (!created_at) return globalDiffDays;
-  const createdDate = new Date(created_at);
-  const empStartEvalDate = new Date(createdDate);
-  empStartEvalDate.setDate(empStartEvalDate.getDate() + 1);
-  const effectiveEmpStart = empStartEvalDate > filterStart ? empStartEvalDate : filterStart;
-  if (filterEnd >= effectiveEmpStart) {
-    return Math.ceil(Math.abs(filterEnd.getTime() - effectiveEmpStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  if (!created_at) {
+    // Nếu không có ngày gia nhập, chỉ tính từ ngày hôm nay (mặc định 1 ngày)
+    return 1;
   }
-  return 0;
+  const createdDate = new Date(created_at);
+  createdDate.setHours(0, 0, 0, 0);
+
+  const filterStartClean = new Date(filterStart);
+  filterStartClean.setHours(0, 0, 0, 0);
+  const filterEndClean = new Date(filterEnd);
+  filterEndClean.setHours(0, 0, 0, 0);
+
+  // Ngày bắt đầu tính điểm thực tế là ngày muộn nhất giữa ngày gia nhập và ngày bắt đầu bộ lọc
+  const effectiveEmpStart = createdDate > filterStartClean ? createdDate : filterStartClean;
+
+  // Nếu ngày gia nhập muộn hơn cả ngày kết thúc bộ lọc (ví dụ lọc tháng 1 nhưng nhân viên vào tháng 3)
+  if (effectiveEmpStart > filterEndClean) {
+    return 0;
+  }
+
+  return Math.ceil(Math.abs(filterEndClean.getTime() - effectiveEmpStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 }
 
 app.get("/api/summary", authenticate, async (req, res) => {
@@ -733,7 +745,7 @@ app.get("/api/dashboard/overview", authenticate, async (req, res) => {
 
     // We fetch everything and process in JS since sqlite/supabase aggregations can be tricky with auth filters if not using views.
     let qEmps = supabase.from('employees')
-      .select('id, full_name, branch_id, department_id, branches(name), departments(name)')
+      .select('id, full_name, branch_id, department_id, created_at, branches(name), departments(name)')
       .eq('is_resigned', false);
 
     if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
