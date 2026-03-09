@@ -40,7 +40,7 @@ export default function Login({ onLogin }: LoginProps) {
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-8 md:p-10">
         <div className="text-center mb-10">
           <div className="flex justify-center mb-8">
-            <Logo className="w-full max-w-[300px] h-20" />
+            <Logo className="w-full max-w-[400px] h-auto" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900">Hệ thống Đánh giá</h1>
           <p className="text-slate-500 mt-2">Đăng nhập để quản lý đánh giá nhân viên</p>
