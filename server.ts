@@ -327,19 +327,13 @@ async function startServer() {
       const empEvals = evaluationData.filter(ev => ev.employee_id === e.id);
 
       // Month stars
-      const monthDelta = empEvals.filter(ev => ev.date >= startOfMonth && ev.date <= endOfMonth).reduce((a, c) => a + (c.stars - 3), 0);
-      const monthDays = getEmpDiffDays(e.created_at, monthStartObj, monthEndObj, monthDiffDays);
-      const monthStars = monthDays * 3 + monthDelta;
+      const monthStars = empEvals.filter(ev => ev.date >= startOfMonth && ev.date <= endOfMonth).reduce((a, c) => a + c.stars, 0);
 
       // Year stars
-      const yearDelta = empEvals.filter(ev => ev.date >= startOfYear && ev.date <= endOfYear).reduce((a, c) => a + (c.stars - 3), 0);
-      const yearDays = getEmpDiffDays(e.created_at, yearStartObj, yearEndObj, yearDiffDays);
-      const yearStars = yearDays * 3 + yearDelta;
+      const yearStars = empEvals.filter(ev => ev.date >= startOfYear && ev.date <= endOfYear).reduce((a, c) => a + c.stars, 0);
 
       // All Time stars
-      const allTimeDelta = empEvals.reduce((a, c) => a + (c.stars - 3), 0);
-      const allTimeDays = getEmpDiffDays(e.created_at, allTimeStartObj, allTimeEndObj, allTimeDiffDays);
-      const allTimeStars = allTimeDays * 3 + allTimeDelta;
+      const allTimeStars = empEvals.reduce((a, c) => a + c.stars, 0);
 
       return {
         ...e,
@@ -580,16 +574,15 @@ async function startServer() {
 
       const rows = (employees || []).map((emp: any) => {
         const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
-        const sumStarsDelta = evalsInRange.reduce((acc: number, cur: any) => acc + (cur.stars - 3), 0);
-        const empDiffDays = getEmpDiffDays(emp.created_at, start, effectiveEnd, diffDays);
+        const totalStars = evalsInRange.reduce((acc: number, cur: any) => acc + cur.stars, 0);
         return {
           id: emp.id,
           employee_code: emp.employee_code,
           full_name: emp.full_name,
           department_name: emp.departments?.name,
           branch_name: emp.branches?.name,
-          total_stars: empDiffDays * 3 + sumStarsDelta,
-          days_evaluated: empDiffDays
+          total_stars: totalStars,
+          days_evaluated: evalsInRange.length
         };
       });
       res.json(rows);
@@ -638,18 +631,16 @@ async function startServer() {
 
       const rows = data.map((dept: any) => {
         const activeEmps = (dept.employees || []).filter((e: any) => !e.is_resigned);
-        let totalStarsDelta = 0;
-        let totalEmpDiffDays = 0;
+        let totalStars = 0;
         activeEmps.forEach((emp: any) => {
           const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
-          totalStarsDelta += evalsInRange.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-          totalEmpDiffDays += getEmpDiffDays(emp.created_at, start, effectiveEnd, diffDays);
+          totalStars += evalsInRange.reduce((a: number, c: any) => a + c.stars, 0);
         });
         return {
           id: dept.id,
           department_name: dept.name,
           total_employees: activeEmps.length,
-          total_stars: activeEmps.length > 0 ? (totalEmpDiffDays * 3 + totalStarsDelta) : 0
+          total_stars: totalStars
         };
       });
       res.json(rows);
@@ -692,14 +683,13 @@ async function startServer() {
 
       const empRows = (emps || []).map((emp: any) => {
         const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
-        const sumDelta = evalsInRange.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-        const empDiffDays = getEmpDiffDays(emp.created_at, start, effectiveEnd, diffDays);
+        const totalStars = evalsInRange.reduce((a: number, c: any) => a + c.stars, 0);
         return {
           id: emp.id,
           employee_code: emp.employee_code,
           full_name: emp.full_name,
-          total_stars: empDiffDays * 3 + sumDelta,
-          days_evaluated: empDiffDays
+          total_stars: totalStars,
+          days_evaluated: evalsInRange.length
         };
       });
       res.json({ department: dept, employees: empRows });
@@ -846,23 +836,20 @@ async function startServer() {
 
       const empScoresAllTime = employees?.map((emp: any) => {
         const evs = evals.filter((e: any) => e.employee_id === emp.id);
-        const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-        const empDiffDays = getEmpDiffDays(emp.created_at, allTimeStartObj, allTimeEndObj, allTimeDiffDays);
-        return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDays * 3 + delta };
+        const total = evs.reduce((a: number, c: any) => a + c.stars, 0);
+        return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total };
       }) || [];
 
       const empScoresYear = employees?.map((emp: any) => {
         const evs = evals.filter((e: any) => e.employee_id === emp.id && e.date >= startOfYear && e.date <= endOfYear);
-        const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-        const empDiffDays = getEmpDiffDays(emp.created_at, yearStartObj, yearEndObj, yearDiffDays);
-        return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDays * 3 + delta };
+        const total = evs.reduce((a: number, c: any) => a + c.stars, 0);
+        return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total };
       }) || [];
 
       const empScoresMonth = employees?.map((emp: any) => {
         const evs = evals.filter((e: any) => e.employee_id === emp.id && e.date >= startOfMonth && e.date <= endOfMonth);
-        const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-        const empDiffDays = getEmpDiffDays(emp.created_at, monthStartObj, monthEndObj, monthDiffDays);
-        return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDays * 3 + delta };
+        const total = evs.reduce((a: number, c: any) => a + c.stars, 0);
+        return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total };
       }) || [];
 
       const top_all_time = empScoresAllTime.sort((a, b) => b.total - a.total).slice(0, 3);
