@@ -85,6 +85,10 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
+app.get("/api/auth/check", authenticate, async (req, res) => {
+  res.json({ success: true });
+});
+
 app.post("/api/change-password", authenticate, async (req, res) => {
   const { oldPassword, newPassword } = req.body;
   const userId = (req as any).user.id;

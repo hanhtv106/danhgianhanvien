@@ -56,6 +56,14 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
     { icon: Shield, label: 'Phân quyền', path: 'permissions', permission: 'users:edit' }, // Super admins usually have users:edit
   ];
 
+  useEffect(() => {
+    // Ping server every 15s to check if token is still valid (Single-Device Login check)
+    const interval = setInterval(() => {
+      apiFetch('/api/auth/check').catch(() => { });
+    }, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
   const filteredMenu = menuItems.filter(item =>
     user.role === 'SUPER_ADMIN' || user.permissions?.includes(item.permission)
   );
