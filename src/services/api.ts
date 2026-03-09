@@ -12,6 +12,7 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
 
   if (response.status === 401 && endpoint !== "/api/login") {
     console.warn("Session expired or invalid token. Clearing session.");
+    alert("Tài khoản của bạn đã được đăng nhập trên một thiết bị khác hoặc phiên đã hết hạn.");
     sessionStorage.removeItem("token");
     sessionStorage.removeItem("user");
     // Use a small delay before reload to ensure storage is cleared
