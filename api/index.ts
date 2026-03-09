@@ -347,13 +347,13 @@ app.get("/api/employees", authenticate, async (req, res) => {
 });
 
 app.post("/api/employees", authenticate, async (req, res) => {
-  const { employee_code, full_name, department_id, branch_id, cccd, is_resigned } = req.body;
+  const { employee_code, full_name, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
   const user = (req as any).user;
   const { data, error } = await supabase.from('employees').insert({
     employee_code, full_name, department_id, branch_id, cccd,
     is_resigned: is_resigned ? true : false,
     created_by: user.id,
-    created_at: new Date().toISOString()
+    created_at: created_at ? new Date(created_at).toISOString() : new Date().toISOString()
   }).select('id').single();
   if (error) return res.status(400).json({ error: "Lỗi khi thêm nhân viên" });
   res.json({ id: data.id });
@@ -382,14 +382,18 @@ app.post("/api/employees/import", authenticate, async (req, res) => {
 });
 
 app.put("/api/employees/:id", authenticate, async (req, res) => {
-  const { employee_code, full_name, department_id, branch_id, cccd, is_resigned } = req.body;
+  const { employee_code, full_name, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
   const user = (req as any).user;
-  const { error } = await supabase.from('employees').update({
+  const updateData: any = {
     employee_code, full_name, department_id, branch_id, cccd,
     is_resigned: is_resigned ? true : false,
     updated_by: user.id,
     updated_at: new Date().toISOString()
-  }).eq('id', req.params.id);
+  };
+  if (created_at) {
+    updateData.created_at = new Date(created_at).toISOString();
+  }
+  const { error } = await supabase.from('employees').update(updateData).eq('id', req.params.id);
   if (error) return res.status(400).json({ error: "Lỗi khi cập nhật" });
   res.json({ success: true });
 });
