@@ -197,7 +197,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                     <X size={24} />
                   </button>
                 </div>
-                <nav className="flex-1 px-4 py-4 space-y-2">
+                <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
                   {filteredMenu.map((item) => (
                     <button
                       key={item.path}
