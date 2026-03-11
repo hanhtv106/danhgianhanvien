@@ -38,6 +38,9 @@ const authenticate = async (req: any, res: any, next: any) => {
       return res.status(401).json({ error: "Phiên đăng nhập đã hết hạn hoặc được đăng nhập ở nơi khác" });
     }
 
+    // Update last active time for this user (session heartbeat)
+    await supabase.from('users').update({ last_active_at: new Date().toISOString() }).eq('id', decoded.id);
+
     req.user = decoded;
     next();
   } catch (err) {
@@ -60,6 +63,18 @@ app.post("/api/login", async (req, res) => {
       return res.status(401).json({ error: "Sai tài khoản hoặc mật khẩu" });
     }
 
+    // 🚨 BLOCK: Single-Device Concurrent Login Check (First-Login-Wins)
+    if (userData.last_active_at) {
+      const lastActive = new Date(userData.last_active_at).getTime();
+      const now = new Date().getTime();
+      const diffSeconds = (now - lastActive) / 1000;
+
+      // If user was active in last 60 seconds, block new login
+      if (diffSeconds < 60) {
+        return res.status(403).json({ error: "Tài khoản đang được đăng nhập ở nơi khác. Vui lòng đăng xuất ở thiết bị cũ hoặc chờ 1 phút." });
+      }
+    }
+
     // Process permissions into a simple array of strings ['module:action', ...]
     const permissions = userData.roles?.role_permissions?.map((rp: any) => rp.permissions?.name).filter(Boolean) || [];
 
@@ -76,12 +91,29 @@ app.post("/api/login", async (req, res) => {
     const token = jwt.sign(user, JWT_SECRET);
 
     // Store the latest token to enforce single-device login
-    await supabase.from('users').update({ current_token: token }).eq('id', userData.id);
+    await supabase.from('users').update({
+      current_token: token,
+      last_active_at: new Date().toISOString()
+    }).eq('id', userData.id);
 
     res.json({ token, user });
   } catch (err) {
     console.error("Login route error:", err);
     res.status(500).json({ error: "Lỗi đăng nhập" });
+  }
+});
+
+app.post("/api/logout", authenticate, async (req, res) => {
+  const userId = (req as any).user.id;
+  try {
+    // Clear token and active status immediately on manual logout
+    await supabase.from('users').update({
+      current_token: null,
+      last_active_at: null
+    }).eq('id', userId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Lỗi đăng xuất" });
   }
 });
 

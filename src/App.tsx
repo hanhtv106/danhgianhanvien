@@ -11,6 +11,7 @@ import UsersPage from './pages/Users';
 import Branches from './pages/Branches';
 import Permissions from './pages/Permissions';
 import { User } from './types';
+import { apiFetch } from './services/api';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -23,10 +24,16 @@ export default function App() {
   
   const [loading, setLoading] = useState(true);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await apiFetch('/api/logout', { method: 'POST' });
+    } catch (err) {
+      console.error("Logout API failed", err);
+    }
     setUser(null);
     sessionStorage.removeItem('user');
     sessionStorage.removeItem('token');
+    window.location.hash = ''; // Clear hash on logout
   };
 
   useEffect(() => {
