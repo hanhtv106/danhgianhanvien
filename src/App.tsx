@@ -14,7 +14,13 @@ import { User } from './types';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState('evaluation');
+  
+  // Initialize tab from hash, default to evaluation
+  const [activeTab, setActiveTab] = useState(() => {
+    const hash = window.location.hash.replace('#', '');
+    return hash || 'evaluation';
+  });
+  
   const [loading, setLoading] = useState(true);
 
   const handleLogout = () => {
@@ -31,10 +37,25 @@ export default function App() {
     }
     setLoading(false);
 
-    const handleTabChange = (e: any) => setActiveTab(e.detail);
-    window.addEventListener('tabChange', handleTabChange);
+    // Initial setup based on hash
+    if (!window.location.hash && savedUser) {
+      window.location.hash = 'evaluation';
+    }
+
+    // Handle hash change for navigation
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) {
+        setActiveTab(hash);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
     document.title = 'Hệ thống Đánh giá Nhân viên';
-    return () => window.removeEventListener('tabChange', handleTabChange);
+    
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
   }, []);
 
   // Inactivity timeout (15 minutes)
@@ -67,6 +88,7 @@ export default function App() {
     setUser(userData);
     sessionStorage.setItem('user', JSON.stringify(userData));
     sessionStorage.setItem('token', token);
+    window.location.hash = 'evaluation'; // Update hash on login
     setActiveTab('evaluation');
   };
 

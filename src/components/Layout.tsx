@@ -69,14 +69,25 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
   );
 
   const [activeTab, setActiveTab] = useState(() => {
+    const hash = window.location.hash.replace('#', '');
+    if (hash) return hash;
+    
     const hasEvalPermission = user.role === 'SUPER_ADMIN' || user.permissions?.includes('evaluations:view');
     if (hasEvalPermission) return 'evaluation';
     return filteredMenu[0]?.path || 'dashboard';
   });
 
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('tabChange', { detail: activeTab }));
-  }, [activeTab]);
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) {
+        setActiveTab(hash);
+      }
+    };
+    
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,7 +133,9 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
           {filteredMenu.map((item) => (
             <button
               key={item.path}
-              onClick={() => setActiveTab(item.path)}
+              onClick={() => {
+                window.location.hash = item.path;
+              }}
               className={cn(
                 "w-full flex items-center p-3 rounded-xl transition-colors",
                 activeTab === item.path
@@ -189,7 +202,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                     <button
                       key={item.path}
                       onClick={() => {
-                        setActiveTab(item.path);
+                        window.location.hash = item.path;
                         setIsMobileMenuOpen(false);
                       }}
                       className={cn(
