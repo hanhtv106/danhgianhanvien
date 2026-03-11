@@ -432,6 +432,7 @@ export default function EvaluationPage({ user }: { user: User }) {
                 <div className="flex flex-wrap gap-2">
                   {reasons
                     .filter(r => r.stars === (tempEvaluation.stars || 3) && tempEvaluation.reason_ids?.includes(r.id))
+                    .filter(r => !r.department_id || r.department_id === tempEvaluation.department_id)
                     .map(r => (
                       <button
                         key={r.id}
@@ -465,22 +466,34 @@ export default function EvaluationPage({ user }: { user: User }) {
                 <div className="grid grid-cols-1 gap-2">
                   {reasons
                     .filter(r => r.stars === (tempEvaluation.stars || 3) && !tempEvaluation.reason_ids?.includes(r.id))
+                    .filter(r => !r.department_id || r.department_id === tempEvaluation.department_id)
                     .map(r => (
                       <button
                         key={r.id}
                         onClick={() => handleReasonToggle(r.id)}
-                        className="flex items-center gap-3 p-4 rounded-2xl border border-slate-200 bg-white text-left transition-all hover:border-indigo-300 hover:bg-slate-50"
+                        className="flex items-center gap-3 p-4 rounded-2xl border border-slate-200 bg-white text-left transition-all hover:border-indigo-300 hover:bg-slate-50 relative overflow-hidden group"
                       >
-                        <div className="w-6 h-6 rounded-lg border border-slate-300 bg-white flex items-center justify-center transition-all">
+                        <div className="w-6 h-6 rounded-lg border border-slate-300 bg-white flex items-center justify-center transition-all shrink-0">
                           {/* Empty box for available selection */}
                         </div>
-                        <span className="flex-1 font-medium text-slate-700">
-                          {r.reason_text}
-                        </span>
+                        <div className="flex flex-col flex-1 min-w-0">
+                           <span className="font-medium text-slate-700 truncate">
+                             {r.reason_text}
+                           </span>
+                           {r.department_name && (
+                             <span className="text-[10px] text-indigo-500 font-medium px-2 py-0.5 bg-indigo-50 rounded-full w-fit mt-1 border border-indigo-100">
+                               Dành riêng cho {r.department_name}
+                             </span>
+                           )}
+                        </div>
                       </button>
                     ))
                   }
-                  {reasons.filter(r => r.stars === (tempEvaluation.stars || 3) && !tempEvaluation.reason_ids?.includes(r.id)).length === 0 && (
+                  {reasons.filter(r => 
+                    r.stars === (tempEvaluation.stars || 3) && 
+                    !tempEvaluation.reason_ids?.includes(r.id) &&
+                    (!r.department_id || r.department_id === tempEvaluation.department_id)
+                  ).length === 0 && (
                     <div className="text-center py-4 border border-dashed border-slate-200 rounded-2xl">
                       <p className="text-slate-400 text-xs italic">Đã chọn tất cả lý do hoặc không có lý do phù hợp</p>
                     </div>

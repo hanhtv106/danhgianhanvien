@@ -232,22 +232,41 @@ async function startServer() {
   });
 
   app.get("/api/reasons", authenticate, async (req, res) => {
-    const { data } = await supabase.from('star_reasons').select('id, stars, reason_text, created_by');
-    res.json(data || []);
+    const { data } = await supabase.from('star_reasons').select('id, stars, reason_text, created_by, department_id, departments(name)');
+    const rows = (data || []).map((r: any) => ({
+      ...r,
+      department_name: r.departments?.name
+    }));
+    res.json(rows);
   });
   app.post("/api/reasons", authenticate, async (req, res) => {
-    const { stars, reason_text } = req.body;
+    const { stars, reason_text, department_id } = req.body;
     const user = (req as any).user;
+    
+    let final_department_id = department_id || null;
+    if (user.role !== 'SUPER_ADMIN') {
+       if (user.department_id) {
+           final_department_id = user.department_id;
+       } else if (!final_department_id) {
+           return res.status(403).json({ error: "Quản trị viên phải chọn một bộ phận cụ thể" });
+       }
+    }
+
     const { data, error } = await supabase.from('star_reasons').insert({
-      stars, reason_text, created_by: user.id
-    }).select('*').single();
+      stars, reason_text, created_by: user.id, department_id: final_department_id
+    }).select('*, departments(name)').single();
     if (error) return res.status(400).json({ error: "Lỗi khi thêm lý do" });
-    res.json(data);
+    
+    const newReason = {
+      ...data,
+      department_name: data.departments?.name
+    };
+    res.json(newReason);
   });
   app.put("/api/reasons/:id", authenticate, async (req, res) => {
     const user = (req as any).user;
     const { id } = req.params;
-    const { stars, reason_text } = req.body;
+    const { stars, reason_text, department_id } = req.body;
 
     const { data: reason } = await supabase.from('star_reasons').select('created_by').eq('id', id).single();
     if (!reason) return res.status(404).json({ error: "Lý do không tồn tại" });
@@ -255,7 +274,16 @@ async function startServer() {
       return res.status(403).json({ error: "Bạn không có quyền sửa lý do này" });
     }
 
-    await supabase.from('star_reasons').update({ stars, reason_text }).eq('id', id);
+    let final_department_id = department_id || null;
+    if (user.role !== 'SUPER_ADMIN') {
+       if (user.department_id) {
+           final_department_id = user.department_id;
+       } else if (!final_department_id) {
+           return res.status(403).json({ error: "Quản trị viên phải chọn một bộ phận cụ thể" });
+       }
+    }
+
+    await supabase.from('star_reasons').update({ stars, reason_text, department_id: final_department_id }).eq('id', id);
     res.json({ success: true });
   });
   app.delete("/api/reasons/:id", authenticate, async (req, res) => {
@@ -473,7 +501,8 @@ async function startServer() {
           stars: ev?.stars || null,
           date: ev?.date || null,
           reason_ids: ev?.evaluation_reasons_junction?.map((r: any) => r.reason_id) || [],
-          note: ev?.note || ""
+          note: ev?.note || "",
+          department_id: emp.department_id
         };
       });
       res.json(processedRows);

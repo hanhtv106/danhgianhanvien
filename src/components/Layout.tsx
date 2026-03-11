@@ -68,7 +68,11 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
     user.role === 'SUPER_ADMIN' || user.permissions?.includes(item.permission)
   );
 
-  const [activeTab, setActiveTab] = useState(filteredMenu[0]?.path || 'dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    const hasEvalPermission = user.role === 'SUPER_ADMIN' || user.permissions?.includes('evaluations:view');
+    if (hasEvalPermission) return 'evaluation';
+    return filteredMenu[0]?.path || 'dashboard';
+  });
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('tabChange', { detail: activeTab }));
@@ -161,7 +165,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       </aside >
 
       {/* Mobile Menu */}
-      < div className="md:hidden" >
+      <div className="md:hidden">
         <button
           onClick={() => setIsMobileMenuOpen(true)}
           className="fixed top-4 left-4 z-20 p-2 bg-white rounded-lg shadow-md"
@@ -201,6 +205,14 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                   ))}
                 </nav>
                 <div className="p-6 border-t space-y-2">
+                  <div className="flex items-center mb-4 px-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 truncate">{user.full_name}</p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {user.role === 'SUPER_ADMIN' ? 'Admin' : user.role === 'ADMIN' ? 'Quản trị' : 'User'}
+                      </p>
+                    </div>
+                  </div>
                   <button
                     onClick={() => {
                       setIsMobileMenuOpen(false);
@@ -223,7 +235,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       </div >
 
       {/* Main Content */}
-      < main className="flex-1 overflow-y-auto p-4 md:p-8" >
+      <main className="flex-1 overflow-y-auto p-4 md:p-8">
         <div className="max-w-7xl mx-auto">
           {React.Children.map(children, child => {
             if (React.isValidElement(child)) {

@@ -49,6 +49,8 @@ export interface StarReason {
   stars: number;
   reason_text: string;
   created_by?: number;
+  department_id?: number | null;
+  department_name?: string;
 }
 
 export interface Evaluation {
@@ -59,4 +61,5 @@ export interface Evaluation {
   reason_ids: number[];
   note?: string;
   date: string;
+  department_id?: number;
 }

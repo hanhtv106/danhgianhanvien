@@ -14,7 +14,7 @@ import { User } from './types';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('evaluation');
   const [loading, setLoading] = useState(true);
 
   const handleLogout = () => {

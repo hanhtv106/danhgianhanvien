@@ -5,13 +5,18 @@ import { StarReason } from '../types';
 
 export default function Reasons({ user }: { user: any }) {
   const [reasons, setReasons] = useState<StarReason[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingReason, setEditingReason] = useState<StarReason | null>(null);
-  const [formData, setFormData] = useState({ stars: 3, reason_text: '' });
+  const [formData, setFormData] = useState({ stars: 3, reason_text: '', department_id: '' });
 
   const fetchData = async () => {
-    const data = await apiFetch('/api/reasons');
-    setReasons(data);
+    const [reasonsData, deptsData] = await Promise.all([
+      apiFetch('/api/reasons'),
+      apiFetch('/api/departments')
+    ]);
+    setReasons(reasonsData);
+    setDepartments(deptsData);
   };
 
   useEffect(() => {
@@ -21,10 +26,22 @@ export default function Reasons({ user }: { user: any }) {
   const handleOpenModal = (reason?: StarReason) => {
     if (reason) {
       setEditingReason(reason);
-      setFormData({ stars: reason.stars, reason_text: reason.reason_text });
+      setFormData({ 
+        stars: reason.stars, 
+        reason_text: reason.reason_text,
+        department_id: reason.department_id ? reason.department_id.toString() : ''
+      });
     } else {
       setEditingReason(null);
-      setFormData({ stars: 3, reason_text: '' });
+      let defaultDeptId = '';
+      if (user.role !== 'SUPER_ADMIN') {
+        if (user.department_id) {
+          defaultDeptId = user.department_id.toString();
+        } else if (departments.length > 0) {
+          defaultDeptId = departments[0].id.toString();
+        }
+      }
+      setFormData({ stars: 3, reason_text: '', department_id: defaultDeptId });
     }
     setIsModalOpen(true);
   };
@@ -35,13 +52,19 @@ export default function Reasons({ user }: { user: any }) {
     const method = editingReason ? 'PUT' : 'POST';
 
     try {
+      const payload: any = { 
+        stars: formData.stars, 
+        reason_text: formData.reason_text,
+        department_id: formData.department_id ? parseInt(formData.department_id) : null
+      };
+
       await apiFetch(url, {
         method,
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
       setIsModalOpen(false);
       setEditingReason(null);
-      setFormData({ stars: 3, reason_text: '' });
+      setFormData({ stars: 3, reason_text: '', department_id: '' });
       fetchData();
     } catch (err: any) {
       alert(err.message);
@@ -78,36 +101,53 @@ export default function Reasons({ user }: { user: any }) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {[1, 2, 3, 4, 5].map(starCount => (
-          <div key={starCount} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-              <div className="flex items-center gap-1 text-amber-500">
-                {Array.from({ length: starCount }).map((_, i) => <Star key={i} size={16} fill="currentColor" />)}
-                <span className="ml-2 text-slate-900 font-bold">{starCount} Sao</span>
+        {[1, 2, 3, 4, 5].map(starCount => {
+          const starReasons = reasons.filter(r => r.stars === starCount);
+          // Sort reasons: first global reasons, then by department name
+          const sortedReasons = [...starReasons].sort((a, b) => {
+            if (!a.department_id && b.department_id) return -1;
+            if (a.department_id && !b.department_id) return 1;
+            const nameA = a.department_name || '';
+            const nameB = b.department_name || '';
+            return nameA.localeCompare(nameB);
+          });
+
+          return (
+            <div key={starCount} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+              <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                <div className="flex items-center gap-1 text-amber-500">
+                  {Array.from({ length: starCount }).map((_, i) => <Star key={i} size={16} fill="currentColor" />)}
+                  <span className="ml-2 text-slate-900 font-bold">{starCount} Sao</span>
+                </div>
+              </div>
+              <div className="p-4 space-y-2">
+                {sortedReasons.map(reason => (
+                  <div key={reason.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl group hover:bg-white border border-transparent hover:border-slate-200 transition-all">
+                    <div className="flex flex-col flex-1 pr-2">
+                      <span className="text-sm text-slate-700 font-medium">{reason.reason_text}</span>
+                      <span className="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-wider">
+                        {reason.department_name ? `Nhóm: ${reason.department_name}` : 'Áp dụng chung'}
+                      </span>
+                    </div>
+                    {canManage(reason) && (
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                        <button onClick={() => handleOpenModal(reason)} className="p-1.5 text-slate-400 hover:text-indigo-600 bg-white rounded-lg hover:shadow-sm">
+                          <Edit2 size={16} />
+                        </button>
+                        <button onClick={() => handleDelete(reason.id)} className="p-1.5 text-slate-400 hover:text-red-500 bg-white rounded-lg hover:shadow-sm">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {sortedReasons.length === 0 && (
+                  <p className="text-xs text-slate-400 italic text-center py-4">Chưa có lý do nào</p>
+                )}
               </div>
             </div>
-            <div className="p-4 space-y-2">
-              {reasons.filter(r => r.stars === starCount).map(reason => (
-                <div key={reason.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl group hover:bg-white border border-transparent hover:border-slate-200 transition-all">
-                  <span className="text-sm text-slate-700">{reason.reason_text}</span>
-                  {canManage(reason) && (
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      <button onClick={() => handleOpenModal(reason)} className="p-1 text-slate-400 hover:text-indigo-600">
-                        <Edit2 size={16} />
-                      </button>
-                      <button onClick={() => handleDelete(reason.id)} className="p-1 text-slate-400 hover:text-red-500">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-              {reasons.filter(r => r.stars === starCount).length === 0 && (
-                <p className="text-xs text-slate-400 italic text-center py-4">Chưa có lý do nào</p>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {isModalOpen && (
@@ -138,6 +178,27 @@ export default function Reasons({ user }: { user: any }) {
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none min-h-[100px]"
                   placeholder="VD: Đi làm muộn, Hoàn thành xuất sắc công việc..."
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Bộ phận áp dụng</label>
+                <select
+                  value={formData.department_id}
+                  onChange={e => setFormData({ ...formData, department_id: e.target.value })}
+                  disabled={user.role !== 'SUPER_ADMIN' && !!user.department_id}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {(user.role === 'SUPER_ADMIN') && <option value="">-- Áp dụng chung cho tất cả --</option>}
+                  {departments
+                    .filter(d => user.role === 'SUPER_ADMIN' || !user.department_id || d.id === user.department_id)
+                    .map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  {user.role !== 'SUPER_ADMIN' && user.department_id 
+                    ? 'Bạn chỉ có thể chọn bộ phận mà bạn quản lý.' 
+                    : 'Chọn bộ phận để áp dụng riêng biệt lý do này.'}
+                </p>
               </div>
               <div className="flex justify-end gap-3 mt-8">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2 text-slate-600 hover:bg-slate-50 rounded-xl transition-colors">Hủy</button>
