@@ -97,6 +97,13 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       setCpError('Mật khẩu mới không khớp');
       return;
     }
+
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      setCpError('Mật khẩu phải tối thiểu 8 ký tự, bao gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt (!@#$%^&*)');
+      return;
+    }
+
     setCpLoading(true);
     try {
       await apiFetch('/api/change-password', {
@@ -122,8 +129,8 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
         "hidden md:flex flex-col bg-white border-r border-slate-200 transition-all duration-300 ease-in-out",
         isSidebarOpen ? "w-64" : "w-16"
       )}>
-        <div className="p-6 flex items-center justify-between">
-          {isSidebarOpen && <Logo className="h-20 w-auto" />}
+        <div className="p-6 flex items-center justify-between border-b border-slate-100 mb-2">
+          {isSidebarOpen && <Logo className="h-28 w-auto px-2" />}
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
             {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
           </button>
@@ -191,8 +198,8 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
             <div className="fixed inset-0 z-30 flex">
               <div className="fixed inset-0 bg-black/50" onClick={() => setIsMobileMenuOpen(false)} />
               <div className="relative w-64 bg-white h-full flex flex-col">
-                <div className="p-6 flex items-center justify-between">
-                  <Logo className="h-20 w-auto" />
+                <div className="p-6 flex items-center justify-between border-b border-slate-100 mb-2">
+                  <Logo className="h-28 w-auto px-2" />
                   <button onClick={() => setIsMobileMenuOpen(false)}>
                     <X size={24} />
                   </button>
@@ -344,14 +351,14 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                   <button
                     type="button"
                     onClick={() => setShowChangePassword(false)}
-                    className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 font-medium rounded-xl hover:bg-slate-50 transition-colors"
+                    className="btn-secondary flex-1"
                   >
                     Hủy
                   </button>
                   <button
                     type="submit"
                     disabled={cpLoading}
-                    className="flex-1 px-4 py-2.5 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 disabled:opacity-50"
+                    className="btn-primary flex-1"
                   >
                     {cpLoading ? 'Đang xử lý...' : 'Cập nhật'}
                   </button>

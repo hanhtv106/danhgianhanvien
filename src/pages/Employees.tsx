@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Download, Upload, MapPin, Building2, User, CreditCard, Calendar, ShieldCheck, History, X, Check } from 'lucide-react';
+import { Plus, Trash2, Edit2, Download, Upload, MapPin, Building2, User, CreditCard, Calendar, ShieldCheck, History, X, Check, Search, Filter } from 'lucide-react';
 import { apiFetch } from '../services/api';
 import { Employee, Department, Branch } from '../types';
 import * as XLSX from 'xlsx';
 import { cn } from '../lib/utils';
 
-export default function Employees() {
+export default function Employees({ user }: { user: any }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  
+  // Filter states
+  const [searchText, setSearchText] = useState('');
+  const [selectedBranch, setSelectedBranch] = useState(user.role !== 'SUPER_ADMIN' ? (user.branch_id?.toString() || 'all') : 'all');
+  const [selectedDept, setSelectedDept] = useState(user.role === 'USER' ? (user.department_id?.toString() || 'all') : 'all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
@@ -199,6 +204,14 @@ export default function Employees() {
     XLSX.writeFile(wb, "Mau_Import_Nhan_Vien_v2.xlsx");
   };
 
+  const filteredEmployees = employees.filter(emp => {
+    const matchesSearch = emp.full_name.toLowerCase().includes(searchText.toLowerCase()) || 
+                         emp.employee_code.toLowerCase().includes(searchText.toLowerCase());
+    const matchesBranch = selectedBranch === 'all' || emp.branch_id?.toString() === selectedBranch;
+    const matchesDept = selectedDept === 'all' || emp.department_id?.toString() === selectedDept;
+    return matchesSearch && matchesBranch && matchesDept;
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -206,26 +219,87 @@ export default function Employees() {
           <h2 className="text-2xl font-bold text-slate-900">Quản lý Nhân viên</h2>
           <p className="text-slate-500">Danh sách và thông tin nhân viên trong hệ thống</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 md:gap-3">
           <button
             onClick={downloadTemplate}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 transition-colors"
+            className="btn-secondary !px-3 sm:!px-6 flex-1 sm:flex-none"
           >
-            <Download size={18} />
-            <span>Tải file mẫu</span>
+            <Download size={18} className="text-indigo-500" />
+            <span className="text-xs sm:text-sm">Tải mẫu</span>
           </button>
-          <label className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors">
-            <Upload size={18} />
-            <span>Import Excel</span>
+          <label className="btn-secondary cursor-pointer !px-3 sm:!px-6 flex-1 sm:flex-none">
+            <Upload size={18} className="text-indigo-500" />
+            <span className="text-xs sm:text-sm">Import</span>
             <input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleImport} />
           </label>
           <button
             onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
+            className="btn-primary col-span-2 sm:col-auto !px-4 sm:!px-6"
           >
             <Plus size={18} />
             <span>Thêm nhân viên</span>
           </button>
+        </div>
+
+      </div>
+
+      {/* Filter Bar */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4 bg-white rounded-3xl border border-slate-200 shadow-sm">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+            type="text"
+            placeholder="Tìm theo tên hoặc mã..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
+          />
+        </div>
+
+        {(user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') && (
+          <div className="relative">
+            <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <select
+              value={selectedBranch}
+              onChange={(e) => {
+                setSelectedBranch(e.target.value);
+                setSelectedDept('all');
+              }}
+              disabled={user.role !== 'SUPER_ADMIN'}
+              className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm appearance-none disabled:opacity-60"
+            >
+              <option value="all">Tất cả chi nhánh</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+            <Filter className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" size={14} />
+          </div>
+        )}
+
+        <div className="relative">
+          <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <select
+            value={selectedDept}
+            onChange={(e) => setSelectedDept(e.target.value)}
+            disabled={user.role === 'USER'}
+            className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm appearance-none disabled:opacity-60"
+          >
+            <option value="all">Tất cả phòng ban</option>
+            {departments
+              .filter(d => selectedBranch === 'all' || d.branch_id?.toString() === selectedBranch)
+              .map(d => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))
+            }
+          </select>
+          <Filter className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" size={14} />
+        </div>
+
+        <div className="flex items-center md:justify-end px-2">
+          <p className="text-xs text-slate-400 font-medium">
+            Hiển thị: <span className="text-indigo-600 font-bold">{filteredEmployees.length}</span> nhân viên
+          </p>
         </div>
       </div>
 
@@ -234,57 +308,55 @@ export default function Employees() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-6 py-4 text-sm font-semibold text-slate-700">Mã NV</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-700">Họ tên</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-700">Chi nhánh</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-700">Phòng ban</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-700">CCCD</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-700">Trạng thái</th>
-                <th className="px-6 py-4 text-sm font-semibold text-slate-700 text-right">Thao tác</th>
+                <th className="px-4 md:px-6 py-4 text-sm font-semibold text-slate-700">Mã NV</th>
+                <th className="px-4 md:px-6 py-4 text-sm font-semibold text-slate-700">Họ tên</th>
+                <th className="hidden md:table-cell px-6 py-4 text-sm font-semibold text-slate-700">Chi nhánh</th>
+                <th className="hidden md:table-cell px-6 py-4 text-sm font-semibold text-slate-700">Phòng ban</th>
+                <th className="hidden lg:table-cell px-6 py-4 text-sm font-semibold text-slate-700">CCCD</th>
+                <th className="px-4 md:px-6 py-4 text-sm font-semibold text-slate-700">Trạng thái</th>
               </tr>
+
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {employees.map((emp) => (
+              {filteredEmployees.map((emp) => (
                 <tr key={emp.id} className="hover:bg-indigo-50/30 transition-all cursor-pointer group border-b border-slate-100 last:border-0" onClick={() => handleViewDetail(emp)}>
-                  <td className="px-6 py-4">
-                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg font-mono">{emp.employee_code}</span>
+                  <td className="px-4 md:px-6 py-4">
+                    <span className="text-[10px] md:text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg font-mono">{emp.employee_code}</span>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="font-semibold text-slate-900">{emp.full_name}</div>
-                    <div className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter sm:hidden">{emp.branch_name}</div>
+                  <td className="px-4 md:px-6 py-3 md:py-4">
+                    <div className="font-bold text-slate-900 text-sm md:text-base leading-tight">{emp.full_name}</div>
+                    <div className="md:hidden flex flex-col gap-0.5 mt-1">
+                      <div className="text-[10px] text-slate-500 flex items-center gap-1 font-medium">
+                        <MapPin size={10} className="text-slate-400" /> {emp.branch_name}
+                      </div>
+                      <div className="text-[10px] text-indigo-500 flex items-center gap-1 font-bold">
+                        <Building2 size={10} className="text-indigo-400" /> {emp.department_name}
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">
+                  <td className="hidden md:table-cell px-6 py-4 text-sm text-slate-600">
                     <div className="flex items-center gap-1.5">
                       <MapPin size={14} className="text-slate-400" />
                       {emp.branch_name}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">
+                  <td className="hidden md:table-cell px-6 py-4 text-sm text-slate-600">
                     <div className="flex items-center gap-1.5">
                       <Building2 size={14} className="text-slate-400" />
                       {emp.department_name}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-500 font-mono italic">{emp.cccd}</td>
-                  <td className="px-6 py-4 text-sm">
+                  <td className="hidden lg:table-cell px-6 py-4 text-sm text-slate-500 font-mono italic">{emp.cccd}</td>
+                  <td className="px-4 md:px-6 py-4 text-sm">
                     <span className={cn(
-                      "px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider",
+                      "px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[11px] font-bold uppercase tracking-wider block w-fit",
                       emp.is_resigned ? "bg-red-50 text-red-600 border border-red-100" : "bg-emerald-50 text-emerald-600 border border-emerald-100"
                     )}>
-                      {emp.is_resigned ? 'Nghỉ việc' : 'Đang làm'}
+                      {emp.is_resigned ? 'Nghỉ' : 'Đang làm'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleOpenModal(emp)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">
-                        <Edit2 size={16} />
-                      </button>
-                      <button onClick={() => handleDelete(emp.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
                 </tr>
+
               ))}
             </tbody>
           </table>
@@ -398,8 +470,19 @@ export default function Employees() {
                 </div>
               )}
               <div className="flex justify-end gap-3 mt-8">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2 text-slate-600 hover:bg-slate-50 rounded-xl transition-colors">Hủy</button>
-                <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors">Lưu</button>
+                <button 
+                  type="button" 
+                  onClick={() => setIsModalOpen(false)} 
+                  className="btn-secondary"
+                >
+                  Hủy
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn-primary"
+                >
+                  Lưu thay đổi
+                </button>
               </div>
             </form>
           </div>
@@ -519,13 +602,36 @@ export default function Employees() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
+            <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    handleDelete(selectedEmployee.id);
+                    setIsDetailModalOpen(false);
+                  }}
+                  className="btn-danger"
+                >
+                  <Trash2 size={18} />
+                  <span>Xóa</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handleOpenModal(selectedEmployee);
+                    setIsDetailModalOpen(false);
+                  }}
+                  className="btn-secondary"
+                >
+                  <Edit2 size={18} className="text-indigo-500" />
+                  <span>Cập nhật</span>
+                </button>
+              </div>
               <button
                 onClick={() => setIsDetailModalOpen(false)}
-                className="px-10 py-3 bg-slate-900 text-white rounded-2xl hover:bg-indigo-600 transition-all font-black text-sm shadow-lg shadow-slate-200"
+                className="btn-dark"
               >
-                Xác nhận
+                Đóng
               </button>
+
             </div>
           </div>
         </div>

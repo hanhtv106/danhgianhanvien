@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Star, Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Plus, Check, Save, Search, Filter, RotateCcw, MessageSquare } from 'lucide-react';
+import { Star, Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Plus, Check, Save, Search, Filter, RotateCcw, MessageSquare, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiFetch } from '../services/api';
 import { Branch, Department, Evaluation, StarReason, User } from '../types';
@@ -235,33 +235,33 @@ export default function EvaluationPage({ user }: { user: User }) {
           <p className="text-slate-500">Chấm sao hàng ngày cho nhân viên phòng ban</p>
         </div>
         <div className="flex flex-col md:flex-row items-center gap-4">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <button
                 onClick={() => setSelectedDate(subDays(selectedDate, 1))}
-                className="p-2 hover:bg-slate-50 rounded-xl transition-colors"
+                className="btn-secondary h-10 w-10 !px-0 !rounded-lg border-none hover:bg-slate-100"
               >
-                <ChevronLeft size={20} />
+                <ChevronLeft size={22} className="text-slate-400" />
               </button>
-              <div className="flex items-center gap-2 px-4 font-medium text-slate-700">
-                <CalendarIcon size={18} className="text-indigo-500" />
+              <div className="flex items-center gap-2 px-6 font-bold text-slate-800 text-base">
+                <CalendarIcon size={20} className="text-indigo-500" />
                 <span>{format(selectedDate, 'dd/MM/yyyy')}</span>
               </div>
               <button
                 onClick={() => setSelectedDate(addDays(selectedDate, 1))}
-                className="p-2 hover:bg-slate-50 rounded-xl transition-colors"
+                className="btn-secondary h-10 w-10 !px-0 !rounded-lg border-none hover:bg-slate-100"
               >
-                <ChevronRight size={20} />
+                <ChevronRight size={22} className="text-slate-400" />
               </button>
+
             </div>
             {!isDateAllowed(selectedDate) && (
               <p className="text-xs text-red-500 font-medium text-center">Chỉ được đánh giá hôm nay và 2 ngày trước</p>
             )}
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-white rounded-3xl border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-white rounded-3xl border border-slate-200 shadow-sm">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
@@ -308,12 +308,13 @@ export default function EvaluationPage({ user }: { user: User }) {
           </select>
         </div>
 
-        <div className="flex items-center justify-center">
-          <p className="text-xs text-slate-400 font-medium">
-            Hiển thị: <span className="text-indigo-600 font-bold">{evaluations.length}</span> nhân viên
+        <div className="flex items-center sm:justify-end px-2">
+          <p className="text-[10px] text-slate-400 font-medium">
+            Sẵn sàng: <span className="text-indigo-600 font-bold">{evaluations.length}</span> nhân viên
           </p>
         </div>
       </div>
+
 
       <div className="relative overflow-hidden min-h-[400px]">
         <AnimatePresence mode="wait">
@@ -345,20 +346,20 @@ export default function EvaluationPage({ user }: { user: User }) {
             ) : (
               <div className="grid grid-cols-1 gap-2">
                 {evaluations.map((ev) => (
-                  <div key={ev.employee_id} className="bg-white rounded-2xl border border-slate-200 p-3 md:p-6 shadow-sm hover:shadow-md transition-all">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-6">
-                      <div className="flex items-center gap-3 md:w-64 shrink-0">
-                        <div className="w-10 h-10 md:w-12 md:h-12 bg-indigo-100 text-indigo-600 rounded-xl md:rounded-2xl flex items-center justify-center font-bold text-base md:text-lg shrink-0">
+                  <div key={ev.employee_id} className="bg-white rounded-2xl border border-slate-200 p-2 md:p-4 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-6">
+                      <div className="flex items-center gap-3 sm:w-64 shrink-0">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 text-indigo-600 rounded-xl sm:rounded-2xl flex items-center justify-center font-bold text-base sm:text-lg shrink-0">
                           {ev.full_name?.charAt(0)}
                         </div>
                         <div className="min-w-0">
-                          <h4 className="font-bold text-slate-900 text-sm md:text-base truncate">{ev.full_name}</h4>
-                          <p className="text-xs text-slate-500 font-mono truncate">{ev.employee_code}</p>
+                          <h4 className="font-bold text-slate-900 text-sm sm:text-base truncate leading-tight">{ev.full_name}</h4>
+                          <p className="text-[10px] sm:text-xs text-slate-500 font-mono truncate">{ev.employee_code}</p>
                         </div>
                       </div>
 
-                      <div className="flex flex-1 items-center justify-center min-w-[200px]" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-center gap-0.5 md:gap-2 bg-slate-50/50 p-1 rounded-2xl md:bg-transparent md:p-0">
+                      <div className="flex flex-1 items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1 sm:gap-2">
                           {[1, 2, 3, 4, 5].map((star) => (
                             <button
                               key={star}
@@ -368,20 +369,21 @@ export default function EvaluationPage({ user }: { user: User }) {
                                 handleStarClick(ev.employee_id, star);
                               }}
                               className={cn(
-                                "p-1 md:p-1.5 rounded-lg transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed",
+                                "p-1 sm:p-1.5 rounded-lg transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed",
                                 (ev.stars || 0) >= star ? "text-amber-400" : "text-slate-200"
                               )}
                             >
-                              <Star size={32} className="md:w-11 md:h-11" fill={(ev.stars || 0) >= star ? "currentColor" : "none"} />
+                              <Star size={24} className="sm:w-10 sm:h-10" fill={(ev.stars || 0) >= star ? "currentColor" : "none"} />
                             </button>
                           ))}
                         </div>
                       </div>
 
-                      <div className="hidden md:block md:w-64"></div>
+                      <div className="hidden lg:block lg:w-32"></div>
                     </div>
                   </div>
                 ))}
+
               </div>
             )}
           </motion.div>
@@ -515,9 +517,12 @@ export default function EvaluationPage({ user }: { user: User }) {
               </section>
             </div>
 
-            <div className="p-6 bg-slate-50 border-t border-slate-100 flex flex-col gap-3">
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex flex-col gap-4">
               {(tempEvaluation.stars !== null && (!tempEvaluation.reason_ids || tempEvaluation.reason_ids.length === 0)) && (
-                <p className="text-xs text-red-500 font-medium italic text-right">Vui lòng chọn ít nhất một lý do mẫu</p>
+                <div className="flex items-center gap-2 text-red-500 justify-end">
+                   <AlertCircle size={14} />
+                   <p className="text-xs font-bold italic">Vui lòng chọn ít nhất một lý do mẫu</p>
+                </div>
               )}
               <div className="flex gap-4">
                 <button
@@ -525,7 +530,7 @@ export default function EvaluationPage({ user }: { user: User }) {
                     setActiveEmpIdForReasons(null);
                     setTempEvaluation(null);
                   }}
-                  className="flex-1 py-4 rounded-2xl font-bold bg-white border-2 border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95"
+                  className="btn-secondary flex-1"
                 >
                   Huỷ bỏ
                 </button>
@@ -533,10 +538,10 @@ export default function EvaluationPage({ user }: { user: User }) {
                   onClick={handleSave}
                   disabled={savingIds.has(tempEvaluation.employee_id) || (tempEvaluation.stars !== null && (!tempEvaluation.reason_ids || tempEvaluation.reason_ids.length === 0))}
                   className={cn(
-                    "flex-[2] py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 text-white shadow-lg active:scale-95",
+                    "btn-primary flex-[2]",
                     (tempEvaluation.stars === null || (tempEvaluation.reason_ids && tempEvaluation.reason_ids.length > 0))
-                      ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200"
-                      : "bg-slate-300 cursor-not-allowed shadow-none"
+                      ? ""
+                      : "bg-slate-300 pointer-events-none shadow-none border-none"
                   )}
                 >
                   {savingIds.has(tempEvaluation.employee_id) ? (

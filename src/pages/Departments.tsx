@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, Search, Filter, MapPin } from 'lucide-react';
 import { apiFetch } from '../services/api';
 import { Department } from '../types';
 
-export default function Departments() {
+export default function Departments({ user }: { user: any }) {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
   const [name, setName] = useState('');
   const [branchId, setBranchId] = useState<string>('');
   const [branches, setBranches] = useState<any[]>([]);
-  const [filterBranchId, setFilterBranchId] = useState<string>('all');
+  const [searchText, setSearchText] = useState('');
+  const [filterBranchId, setFilterBranchId] = useState(user.role !== 'SUPER_ADMIN' ? (user.branch_id?.toString() || 'all') : 'all');
 
   const fetchData = async () => {
     const [depts, branchData] = await Promise.all([
@@ -62,38 +63,63 @@ export default function Departments() {
     }
   };
 
-  const filteredDepartments = departments.filter(dept =>
-    filterBranchId === 'all' || dept.branch_id?.toString() === filterBranchId
-  );
+  const filteredDepartments = departments.filter(dept => {
+    const matchesSearch = dept.name.toLowerCase().includes(searchText.toLowerCase());
+    const matchesBranch = filterBranchId === 'all' || dept.branch_id?.toString() === filterBranchId;
+    return matchesSearch && matchesBranch;
+  });
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Quản lý Phòng ban</h2>
           <p className="text-slate-500">Danh sách các phòng ban trong công ty</p>
         </div>
-        <div className="flex flex-col md:flex-row items-center gap-3">
-          <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm">
-            <span className="text-slate-400 text-sm font-medium">Lọc chi nhánh:</span>
+        <button
+          onClick={() => handleOpenModal()}
+          className="btn-primary"
+        >
+          <Plus size={18} />
+          <span>Thêm phòng ban</span>
+        </button>
+
+      </div>
+
+      {/* Filter Bar */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-white rounded-3xl border border-slate-200 shadow-sm">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+            type="text"
+            placeholder="Tìm theo tên phòng ban..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
+          />
+        </div>
+
+        {user.role === 'SUPER_ADMIN' && (
+          <div className="relative">
+            <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <select
               value={filterBranchId}
               onChange={(e) => setFilterBranchId(e.target.value)}
-              className="bg-transparent border-none text-sm font-semibold text-indigo-600 outline-none cursor-pointer"
+              className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm appearance-none"
             >
               <option value="all">Tất cả chi nhánh</option>
               {branches.map(b => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </select>
+            <Filter className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" size={14} />
           </div>
-          <button
-            onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
-          >
-            <Plus size={18} />
-            <span>Thêm phòng ban</span>
-          </button>
+        )}
+
+        <div className="flex items-center md:justify-end px-2">
+          <p className="text-xs text-slate-400 font-medium">
+            Hiển thị: <span className="text-indigo-600 font-bold">{filteredDepartments.length}</span> phòng ban
+          </p>
         </div>
       </div>
 
@@ -101,35 +127,34 @@ export default function Departments() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="px-6 py-4 text-sm font-semibold text-slate-700">ID</th>
-              <th className="px-6 py-4 text-sm font-semibold text-slate-700">Tên phòng ban</th>
-              <th className="px-6 py-4 text-sm font-semibold text-slate-700">Chi nhánh</th>
-              <th className="px-6 py-4 text-sm font-semibold text-slate-700 text-right">Thao tác</th>
+              <th className="hidden sm:table-cell px-6 py-4 text-sm font-semibold text-slate-700">ID</th>
+              <th className="px-4 md:px-6 py-4 text-sm font-semibold text-slate-700">Phòng ban</th>
+              <th className="hidden sm:table-cell px-6 py-4 text-sm font-semibold text-slate-700">Chi nhánh</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredDepartments.map((dept) => (
-              <tr key={dept.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4 text-sm text-slate-500">{dept.id}</td>
-                <td className="px-6 py-4 text-sm font-medium text-slate-900">{dept.name}</td>
-                <td className="px-6 py-4 text-sm text-slate-600">
+              <tr 
+                key={dept.id} 
+                className="hover:bg-indigo-50/30 transition-all cursor-pointer group"
+                onClick={() => handleOpenModal(dept)}
+              >
+                <td className="hidden sm:table-cell px-6 py-4 text-sm text-slate-500">{dept.id}</td>
+                <td className="px-4 md:px-6 py-4">
+                   <div className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{dept.name}</div>
+                   <div className="sm:hidden text-[10px] text-slate-400 font-medium mt-1">
+                      <MapPin size={10} className="inline mr-1" />{dept.branch_name || 'Chưa gán'}
+                   </div>
+                </td>
+                <td className="hidden sm:table-cell px-6 py-4 text-sm text-slate-600 border-none">
                   <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-medium">
                     {dept.branch_name || 'Chưa gán'}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => handleOpenModal(dept)} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors">
-                      <Edit2 size={18} />
-                    </button>
-                    <button onClick={() => handleDelete(dept.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors">
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </td>
               </tr>
             ))}
           </tbody>
+
         </table>
       </div>
 
@@ -163,9 +188,39 @@ export default function Departments() {
                   ))}
                 </select>
               </div>
-              <div className="flex justify-end gap-3 mt-8">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2 text-slate-600 hover:bg-slate-50 rounded-xl transition-colors">Hủy</button>
-                <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors">Lưu</button>
+              <div className="flex justify-between items-center mt-8">
+                <div>
+                  {editingDept && (
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        handleDelete(editingDept.id);
+                        setIsModalOpen(false);
+                      }} 
+                      className="btn-danger"
+                    >
+                      <Trash2 size={18} />
+                      <span>Xóa</span>
+                    </button>
+
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <button 
+                    type="button" 
+                    onClick={() => setIsModalOpen(false)} 
+                    className="btn-secondary"
+                  >
+                    Hủy
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn-primary"
+                  >
+                    Lưu
+                  </button>
+
+                </div>
               </div>
             </form>
           </div>

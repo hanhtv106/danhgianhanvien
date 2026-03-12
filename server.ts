@@ -139,6 +139,11 @@ async function startServer() {
         return res.status(400).json({ error: "Mật khẩu cũ không đúng" });
       }
 
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
+      if (!passwordRegex.test(newPassword)) {
+        return res.status(400).json({ error: "Mật khẩu mới không đủ mạnh (tối thiểu 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt)" });
+      }
+
       const hashedNewPassword = bcrypt.hashSync(newPassword, 10);
       await supabase.from('users').update({ password: hashedNewPassword }).eq('id', userId);
       res.json({ success: true });
@@ -148,14 +153,31 @@ async function startServer() {
   });
 
   app.get("/api/users", authenticate, async (req, res) => {
+    const user = (req as any).user;
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('users')
         .select('id, username, full_name, role, role_id, department_id, branch_id, departments(name), branches(name)');
 
+      if (user.role === 'ADMIN') {
+        if (user.branch_id) {
+          query = query.eq('branch_id', user.branch_id);
+        } else {
+          query = query.eq('id', user.id); // If admin has no branch context, they only see themselves? (Should not happen)
+        }
+      } else if (user.role === 'USER') {
+        if (user.department_id) {
+          query = query.eq('department_id', user.department_id);
+        } else {
+          query = query.eq('id', user.id);
+        }
+      }
+
+      const { data, error } = await query;
+
       if (error) throw error;
 
-      const rows = data.map((u: any) => ({
+      const rows = (data || []).map((u: any) => ({
         ...u,
         department_name: u.departments?.name,
         branch_name: u.branches?.name
@@ -168,12 +190,35 @@ async function startServer() {
 
   app.post("/api/users", authenticate, async (req, res) => {
     const { username, password, full_name, role, role_id, department_id, branch_id } = req.body;
+    const currentUser = (req as any).user;
+
+    // Validation
+    const lowerUsername = (username || '').toLowerCase();
+    const usernameRegex = /^[a-z0-9@.]{5,24}$/;
+    if (!usernameRegex.test(lowerUsername)) {
+      return res.status(400).json({ error: "Tên tài khoản phải từ 5-24 ký tự, chỉ chứa chữ cái thường, số, @ và dấu chấm." });
+    }
+
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({ error: "Mật khẩu phải tối thiểu 8 ký tự, bao gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt (!@#$%^&*)" });
+    }
+
+    // RBAC check for creating users
+    if (currentUser.role === 'ADMIN') {
+      if (branch_id && parseInt(branch_id) !== currentUser.branch_id) {
+        return res.status(403).json({ error: "Bạn chỉ có thể tạo người dùng trong chi nhánh của mình" });
+      }
+    } else if (currentUser.role === 'USER') {
+      return res.status(403).json({ error: "Bạn không có quyền tạo người dùng" });
+    }
+
     const hashedPassword = bcrypt.hashSync(password, 10);
     try {
       const { data, error } = await supabase.from('users').insert({
-        username, password: hashedPassword, full_name, role, role_id,
+        username: lowerUsername, password: hashedPassword, full_name, role, role_id,
         department_id: department_id || null,
-        branch_id: branch_id || null
+        branch_id: branch_id || (currentUser.role === 'ADMIN' ? currentUser.branch_id : null)
       }).select('id').single();
 
       if (error) throw error;
@@ -186,8 +231,23 @@ async function startServer() {
   app.put("/api/users/:id", authenticate, async (req, res) => {
     const { username, password, full_name, role, role_id, department_id, branch_id } = req.body;
     const { id } = req.params;
+
+    // Validation
+    const lowerUsername = (username || '').toLowerCase();
+    const usernameRegex = /^[a-z0-9@.]{5,24}$/;
+    if (!usernameRegex.test(lowerUsername)) {
+      return res.status(400).json({ error: "Tên tài khoản phải từ 5-24 ký tự, chỉ chứa chữ cái thường, số, @ và dấu chấm." });
+    }
+
+    if (password) {
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
+      if (!passwordRegex.test(password)) {
+        return res.status(400).json({ error: "Mật khẩu phải tối thiểu 8 ký tự, bao gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt (!@#$%^&*)" });
+      }
+    }
+
     try {
-      const updates: any = { username, full_name, role, role_id, department_id: department_id || null, branch_id: branch_id || null };
+      const updates: any = { username: lowerUsername, full_name, role, role_id, department_id: department_id || null, branch_id: branch_id || null };
       if (password) updates.password = bcrypt.hashSync(password, 10);
 
       const { error } = await supabase.from('users').update(updates).eq('id', id);
@@ -236,8 +296,15 @@ async function startServer() {
     const user = (req as any).user;
     let query = supabase.from('departments').select('*, branches(name)');
 
-    if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
-      query = query.eq('branch_id', user.branch_id);
+    if (user.role !== 'SUPER_ADMIN') {
+      if (user.role === 'ADMIN' && user.branch_id) {
+        query = query.eq('branch_id', user.branch_id);
+      } else if (user.role === 'USER' && user.department_id) {
+        query = query.eq('id', user.department_id);
+      } else if (!user.branch_id && !user.department_id) {
+        // Fallback or specific restriction
+        return res.json([]);
+      }
     }
 
     const { data } = await query;
@@ -249,25 +316,79 @@ async function startServer() {
   });
   app.post("/api/departments", authenticate, async (req, res) => {
     const { name, branch_id } = req.body;
-    const { data, error } = await supabase.from('departments').insert({ name, branch_id: branch_id || null }).select('*').single();
+    const user = (req as any).user;
+
+    if (user.role === 'ADMIN') {
+      if (branch_id && parseInt(branch_id) !== user.branch_id) {
+        return res.status(403).json({ error: "Không có quyền tạo bộ phận cho chi nhánh khác" });
+      }
+    } else if (user.role === 'USER') {
+      return res.status(403).json({ error: "Bạn không có quyền quản lý bộ phận" });
+    }
+
+    const { data, error } = await supabase.from('departments').insert({ 
+        name, 
+        branch_id: user.role === 'ADMIN' ? user.branch_id : (branch_id || null) 
+    }).select('*').single();
+
     if (error) return res.status(400).json({ error: "Bộ phận đã tồn tại hoặc dữ liệu không hợp lệ" });
     res.json(data);
   });
   app.put("/api/departments/:id", authenticate, async (req, res) => {
     const { name, branch_id } = req.body;
-    await supabase.from('departments').update({ name, branch_id: branch_id || null }).eq('id', req.params.id);
+    const user = (req as any).user;
+    const { id } = req.params;
+
+    const { data: existing } = await supabase.from('departments').select('branch_id').eq('id', id).single();
+    if (!existing) return res.status(404).json({ error: "Bộ phận không tồn tại" });
+
+    if (user.role === 'ADMIN') {
+      if (existing.branch_id !== user.branch_id) return res.status(403).json({ error: "Không có quyền sửa bộ phận này" });
+      if (branch_id && parseInt(branch_id) !== user.branch_id) return res.status(403).json({ error: "Không thể chuyển bộ phận sang chi nhánh khác" });
+    } else if (user.role === 'USER') {
+      return res.status(403).json({ error: "Bạn không có quyền sửa bộ phận" });
+    }
+
+    await supabase.from('departments').update({ name, branch_id: branch_id || null }).eq('id', id);
     res.json({ success: true });
   });
   app.delete("/api/departments/:id", authenticate, async (req, res) => {
-    await supabase.from('departments').delete().eq('id', req.params.id);
+    const user = (req as any).user;
+    const { id } = req.params;
+
+    const { data: existing } = await supabase.from('departments').select('branch_id').eq('id', id).single();
+    if (!existing) return res.status(404).json({ error: "Bộ phận không tồn tại" });
+
+    if (user.role !== 'SUPER_ADMIN') {
+      if (user.role === 'ADMIN' && existing.branch_id !== user.branch_id) return res.status(403).json({ error: "Không có quyền xóa bộ phận này" });
+      if (user.role === 'USER') return res.status(403).json({ error: "Bạn không có quyền xóa bộ phận" });
+    }
+
+    await supabase.from('departments').delete().eq('id', id);
     res.json({ success: true });
   });
 
   app.get("/api/reasons", authenticate, async (req, res) => {
-    const { data } = await supabase.from('star_reasons').select('id, stars, reason_text, created_by, department_id, departments(name)');
+    const user = (req as any).user;
+    let query = supabase.from('star_reasons')
+      .select('id, stars, reason_text, created_by, department_id, departments(name, branch_id), created_by_user:users!star_reasons_created_by_fkey(full_name)');
+
+    if (user.role === 'ADMIN') {
+      if (user.branch_id) {
+        // Filter: reasons with null department OR departments that belong to the user's branch
+        query = query.or(`department_id.is.null,departments.branch_id.eq.${user.branch_id}`);
+      }
+    } else if (user.role === 'USER') {
+      if (user.department_id) {
+        query = query.or(`department_id.is.null,department_id.eq.${user.department_id}`);
+      }
+    }
+
+    const { data } = await query;
     const rows = (data || []).map((r: any) => ({
       ...r,
-      department_name: r.departments?.name
+      department_name: r.departments?.name,
+      created_by_name: r.created_by_user?.full_name
     }));
     res.json(rows);
   });
@@ -276,22 +397,39 @@ async function startServer() {
     const user = (req as any).user;
     
     let final_department_id = department_id || null;
-    if (user.role !== 'SUPER_ADMIN') {
+    if (user.role === 'ADMIN') {
+      // Branch admin must pick a department in their branch
+       if (!final_department_id) {
+           return res.status(400).json({ error: "Quản trị viên chi nhánh phải chọn một bộ phận cụ thể" });
+       }
+       // Validate department belongs to branch
+       const { data: dept } = await supabase.from('departments').select('branch_id').eq('id', final_department_id).single();
+       if (!dept || dept.branch_id !== user.branch_id) {
+           return res.status(403).json({ error: "Bộ phận không thuộc chi nhánh của bạn" });
+       }
+    } else if (user.role === 'USER') {
        if (user.department_id) {
            final_department_id = user.department_id;
-       } else if (!final_department_id) {
-           return res.status(403).json({ error: "Quản trị viên phải chọn một bộ phận cụ thể" });
+       } else {
+           return res.status(403).json({ error: "Người dùng phải thuộc về một bộ phận" });
        }
     }
 
-    const { data, error } = await supabase.from('star_reasons').insert({
+    const { data: insertedData, error } = await supabase.from('star_reasons').insert({
       stars, reason_text, created_by: user.id, department_id: final_department_id
     }).select('*, departments(name)').single();
-    if (error) return res.status(400).json({ error: "Lỗi khi thêm lý do" });
+    
+    if (error) {
+      console.error("Error creating reason:", error);
+      return res.status(400).json({ error: "Lỗi khi thêm lý do: " + error.message });
+    }
+    
+    const { data: creator } = await supabase.from('users').select('full_name').eq('id', user.id).single();
     
     const newReason = {
-      ...data,
-      department_name: data.departments?.name
+      ...insertedData,
+      department_name: (insertedData as any).departments?.name,
+      created_by_name: creator?.full_name || user.full_name
     };
     res.json(newReason);
   });
@@ -300,35 +438,69 @@ async function startServer() {
     const { id } = req.params;
     const { stars, reason_text, department_id } = req.body;
 
-    const { data: reason } = await supabase.from('star_reasons').select('created_by').eq('id', id).single();
+    const { data: reason } = await supabase.from('star_reasons')
+      .select('created_by, department_id, departments(branch_id)')
+      .eq('id', parseInt(id))
+      .single();
+      
     if (!reason) return res.status(404).json({ error: "Lý do không tồn tại" });
-    if (user.role !== 'SUPER_ADMIN' && reason.created_by !== user.id) {
+    
+    let canEdit = user.role === 'SUPER_ADMIN' || user.permissions?.includes('reasons:edit') || reason.created_by === user.id;
+
+    if (user.role === 'ADMIN') {
+      if ((reason as any).departments?.branch_id !== user.branch_id) canEdit = false;
+    } else if (user.role === 'USER') {
+      if (reason.department_id !== user.department_id) canEdit = false;
+    }
+
+    if (!canEdit) {
       return res.status(403).json({ error: "Bạn không có quyền sửa lý do này" });
     }
 
     let final_department_id = department_id || null;
-    if (user.role !== 'SUPER_ADMIN') {
-       if (user.department_id) {
-           final_department_id = user.department_id;
-       } else if (!final_department_id) {
-           return res.status(403).json({ error: "Quản trị viên phải chọn một bộ phận cụ thể" });
-       }
+    if (user.role === 'ADMIN') {
+       if (!final_department_id) return res.status(400).json({ error: "Phải chọn bộ phận" });
+       const { data: d } = await supabase.from('departments').select('branch_id').eq('id', final_department_id).single();
+       if (!d || d.branch_id !== user.branch_id) return res.status(403).json({ error: "Bộ phận không hợp lệ" });
+    } else if (user.role === 'USER') {
+       final_department_id = user.department_id;
     }
 
-    await supabase.from('star_reasons').update({ stars, reason_text, department_id: final_department_id }).eq('id', id);
+    const { error: updateError } = await supabase.from('star_reasons')
+      .update({ stars, reason_text, department_id: final_department_id })
+      .eq('id', parseInt(id));
+      
+    if (updateError) {
+      console.error("Error updating reason:", updateError);
+      return res.status(400).json({ error: "Lỗi khi cập nhật lý do: " + updateError.message });
+    }
     res.json({ success: true });
   });
   app.delete("/api/reasons/:id", authenticate, async (req, res) => {
     const user = (req as any).user;
     const { id } = req.params;
 
-    const { data: reason } = await supabase.from('star_reasons').select('created_by').eq('id', id).single();
+    const { data: reason } = await supabase.from('star_reasons').select('created_by, department_id, departments(branch_id)').eq('id', parseInt(id)).single();
     if (!reason) return res.status(404).json({ error: "Lý do không tồn tại" });
-    if (user.role !== 'SUPER_ADMIN' && reason.created_by !== user.id) {
+    
+    let canDelete = user.role === 'SUPER_ADMIN' || user.permissions?.includes('reasons:delete') || reason.created_by === user.id;
+
+    if (user.role === 'ADMIN') {
+      if ((reason as any).departments?.branch_id !== user.branch_id) canDelete = false;
+    } else if (user.role === 'USER') {
+      // Users cannot delete global reasons (department_id is null) or reasons from other departments
+      if (reason.department_id === null || reason.department_id !== user.department_id) canDelete = false;
+    }
+
+    if (!canDelete) {
       return res.status(403).json({ error: "Bạn không có quyền xóa lý do này" });
     }
 
-    await supabase.from('star_reasons').delete().eq('id', id);
+    const { error: deleteError } = await supabase.from('star_reasons').delete().eq('id', parseInt(id));
+    if (deleteError) {
+      console.error("Error deleting reason:", deleteError);
+      return res.status(400).json({ error: "Lỗi khi xóa lý do: " + deleteError.message });
+    }
     res.json({ success: true });
   });
 
@@ -422,13 +594,25 @@ async function startServer() {
   app.post("/api/employees", authenticate, async (req, res) => {
     const { employee_code, full_name, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
     const user = (req as any).user;
+
+    // RBAC validation
+    if (user.role === 'ADMIN') {
+      if (branch_id && parseInt(branch_id) !== user.branch_id) return res.status(403).json({ error: "Không thể tạo nhân viên cho chi nhánh khác" });
+      const { data: dept } = await supabase.from('departments').select('branch_id').eq('id', department_id).single();
+      if (!dept || dept.branch_id !== user.branch_id) return res.status(403).json({ error: "Bộ phận không thuộc chi nhánh của bạn" });
+    } else if (user.role === 'USER') {
+      if (department_id && parseInt(department_id) !== user.department_id) return res.status(403).json({ error: "Bạn chỉ có quyền tạo nhân viên trong bộ phận của mình" });
+    }
+
     const { data, error } = await supabase.from('employees').insert({
-      employee_code, full_name, department_id, branch_id, cccd,
+      employee_code, full_name, department_id, 
+      branch_id: user.role === 'ADMIN' ? user.branch_id : (branch_id || (user.role === 'USER' ? user.branch_id : null)), 
+      cccd,
       is_resigned: is_resigned ? true : false,
       created_by: user.id,
       created_at: created_at ? new Date(created_at).toISOString() : new Date().toISOString()
     }).select('id').single();
-    if (error) return res.status(400).json({ error: "Lỗi khi thêm nhân viên" });
+    if (error) return res.status(400).json({ error: "Lỗi khi thêm nhân viên: " + error.message });
     res.json({ id: data.id });
   });
 
@@ -457,6 +641,24 @@ async function startServer() {
   app.put("/api/employees/:id", authenticate, async (req, res) => {
     const { employee_code, full_name, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
     const user = (req as any).user;
+    const { id } = req.params;
+
+    const { data: existing } = await supabase.from('employees').select('branch_id, department_id').eq('id', id).single();
+    if (!existing) return res.status(404).json({ error: "Nhân viên không tồn tại" });
+
+    // RBAC Check
+    if (user.role === 'ADMIN') {
+      if (existing.branch_id !== user.branch_id) return res.status(403).json({ error: "Không có quyền sửa nhân viên của chi nhánh khác" });
+      if (branch_id && parseInt(branch_id) !== user.branch_id) return res.status(403).json({ error: "Không thể chuyển nhân viên sang chi nhánh khác" });
+      if (department_id) {
+        const { data: dept } = await supabase.from('departments').select('branch_id').eq('id', department_id).single();
+        if (!dept || dept.branch_id !== user.branch_id) return res.status(403).json({ error: "Bộ phận đích không thuộc chi nhánh của bạn" });
+      }
+    } else if (user.role === 'USER') {
+      if (existing.department_id !== user.department_id) return res.status(403).json({ error: "Không có quyền sửa nhân viên bộ phận này" });
+      if (department_id && parseInt(department_id) !== user.department_id) return res.status(403).json({ error: "Không thể chuyển nhân viên sang bộ phận khác" });
+    }
+
     const updateData: any = {
       employee_code, full_name, department_id, branch_id, cccd,
       is_resigned: is_resigned ? true : false,
@@ -467,7 +669,7 @@ async function startServer() {
       updateData.created_at = new Date(created_at).toISOString();
     }
     try {
-      const { error } = await supabase.from('employees').update(updateData).eq('id', req.params.id);
+      const { error } = await supabase.from('employees').update(updateData).eq('id', id);
       if (error) throw error;
       res.json({ success: true });
     } catch (err) {
@@ -477,7 +679,16 @@ async function startServer() {
   });
 
   app.delete("/api/employees/:id", authenticate, async (req, res) => {
-    await supabase.from('employees').delete().eq('id', req.params.id);
+    const user = (req as any).user;
+    const { id } = req.params;
+
+    const { data: existing } = await supabase.from('employees').select('branch_id, department_id').eq('id', id).single();
+    if (!existing) return res.status(404).json({ error: "Nhân viên không tồn tại" });
+
+    if (user.role === 'ADMIN' && existing.branch_id !== user.branch_id) return res.status(403).json({ error: "Không có quyền xóa nhân viên chi nhánh khác" });
+    if (user.role === 'USER' && existing.department_id !== user.department_id) return res.status(403).json({ error: "Không có quyền xóa nhân viên bộ phận khác" });
+
+    await supabase.from('employees').delete().eq('id', id);
     res.json({ success: true });
   });
 
@@ -644,22 +855,23 @@ async function startServer() {
       }
 
       const rows = (employees || []).map((emp: any) => {
-        const rows = (employees || []).map((emp: any) => {
-          const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
-          const delta = evalsInRange.reduce((acc: number, cur: any) => acc + (cur.stars - 3), 0);
-          const empDiffDays = getEmpDiffDays(emp.created_at, start, effectiveEnd, diffDays);
-          return {
-            id: emp.id,
-            employee_code: emp.employee_code,
-            full_name: emp.full_name,
-            department_name: emp.departments?.name,
-            branch_name: emp.branches?.name,
-            total_stars: empDiffDays * 3 + delta,
-            days_evaluated: empDiffDays
-          };
-        });
+        const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
+        const delta = evalsInRange.reduce((acc: number, cur: any) => acc + (cur.stars - 3), 0);
+        const empDiffDays = getEmpDiffDays(emp.created_at, start, effectiveEnd, diffDays);
+        return {
+          id: emp.id,
+          employee_code: emp.employee_code,
+          full_name: emp.full_name,
+          branch_name: emp.branches?.name,
+          branch_id: emp.branch_id,
+          department_name: emp.departments?.name,
+          department_id: emp.department_id,
+          total_stars: empDiffDays * 3 + delta,
+          days_evaluated: empDiffDays
+        };
       });
       res.json(rows);
+
     } catch (err) { res.status(500).json({ error: "Lỗi báo cáo tổng hợp" }); }
   });
 
@@ -812,7 +1024,7 @@ async function startServer() {
         const reasons = ev.evaluation_reasons_junction?.map((erj: any) => erj.star_reasons?.reason_text) || [];
         return {
           ...ev,
-          evaluator_name: ev.users?.full_name,
+          evaluator_name: ev.users?.full_name || 'Hệ thống',
           reason_text: reasons.join(', ')
         };
       });

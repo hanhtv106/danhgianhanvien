@@ -21,10 +21,13 @@ export default function Reports({ user }: { user: any }) {
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
 
   // Filter states
-  const [selectedBranch, setSelectedBranch] = useState<string>(user.role !== 'SUPER_ADMIN' ? (user.branch_id?.toString() || 'all') : 'all');
-  const [selectedDept, setSelectedDept] = useState<string>(user.role === 'USER' ? (user.department_id?.toString() || 'all') : 'all');
+  const [selectedBranch, setSelectedBranch] = useState<string>(user?.role !== 'SUPER_ADMIN' ? (user?.branch_id?.toString() || 'all') : 'all');
+  const [selectedDept, setSelectedDept] = useState<string>(user?.role === 'USER' ? (user?.department_id?.toString() || 'all') : 'all');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('all');
   const [loading, setLoading] = useState(false);
+
+  if (!user) return <div className="p-8 text-center text-slate-400">Đang tải thông tin...</div>;
+
 
   // Drill-down states
   const [detailView, setDetailView] = useState<{ type: 'EMPLOYEE' | 'DEPARTMENT', id: number } | null>(null);
@@ -92,30 +95,34 @@ export default function Reports({ user }: { user: any }) {
   }, [detailView, startDate, endDate]);
 
   // Filtering and Sorting logic
-  const filteredEmployeeData = employeeData
+  const filteredEmployeeData = (employeeData || [])
     .filter(row => {
-      const matchBranch = selectedBranch === 'all' || row.branch_name === branches.find(b => b.id.toString() === selectedBranch)?.name;
-      const matchDept = selectedDept === 'all' || row.department_name === departments.find(d => d.id.toString() === selectedDept)?.name;
-      const matchEmp = selectedEmployeeId === 'all' || row.id.toString() === selectedEmployeeId;
+      if (!row) return false;
+      const matchBranch = selectedBranch === 'all' || row.branch_id?.toString() === selectedBranch;
+      const matchDept = selectedDept === 'all' || row.department_id?.toString() === selectedDept;
+      const matchEmp = selectedEmployeeId === 'all' || row.id?.toString() === selectedEmployeeId;
       return matchBranch && matchDept && matchEmp;
+
     })
     .sort((a, b) => (b.total_stars || 0) - (a.total_stars || 0));
 
-  const filteredDepartmentData = departmentData
+  const filteredDepartmentData = (departmentData || [])
     .filter(row => {
-      return selectedDept === 'all' || row.id.toString() === selectedDept;
+      if (!row) return false;
+      return selectedDept === 'all' || row.id?.toString() === selectedDept;
     })
     .sort((a, b) => (b.total_stars || 0) - (a.total_stars || 0));
 
-  const filteredEmployeesForFilter = allEmployees.filter(emp => {
-    const matchSearch = emp.full_name.toLowerCase().includes(empSearchQuery.toLowerCase()) ||
-      emp.employee_code.toLowerCase().includes(empSearchQuery.toLowerCase());
+  const filteredEmployeesForFilter = (allEmployees || []).filter(emp => {
+    if (!emp) return false;
+    const matchSearch = (emp.full_name || '').toLowerCase().includes(empSearchQuery.toLowerCase()) ||
+      (emp.employee_code || '').toLowerCase().includes(empSearchQuery.toLowerCase());
     const matchBranch = selectedBranch === 'all' || emp.branch_id?.toString() === selectedBranch;
     const matchDept = selectedDept === 'all' || emp.department_id?.toString() === selectedDept;
     return matchSearch && matchBranch && matchDept;
   });
 
-  const selectedEmployeeForFilter = allEmployees.find(emp => emp.id.toString() === selectedEmployeeId);
+  const selectedEmployeeForFilter = (allEmployees || []).find(emp => emp.id?.toString() === selectedEmployeeId);
 
   const exportToExcel = () => {
     let ws;
@@ -149,11 +156,12 @@ export default function Reports({ user }: { user: any }) {
       <div className="space-y-6 animate-in fade-in duration-300">
         <button
           onClick={() => { setDetailView(null); setDetailData(null); }}
-          className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors font-medium"
+          className="btn-secondary"
         >
           <ArrowLeft size={20} />
-          <span>Quay lại danh sách</span>
+          <span>Quay lại</span>
         </button>
+
 
         {detailView.type === 'EMPLOYEE' ? (
           <div className="space-y-6">
@@ -190,14 +198,16 @@ export default function Reports({ user }: { user: any }) {
                 <h4 className="font-bold text-slate-900">Lịch sử đánh giá chi tiết</h4>
                 <span className="text-sm text-slate-500">{detailData.evaluations.length} lượt đánh giá</span>
               </div>
-              <div className="overflow-x-auto">
+              
+              {/* Desktop Table */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">
                       <th className="px-6 py-4 text-sm font-semibold text-slate-700">Ngày</th>
                       <th className="px-6 py-4 text-sm font-semibold text-slate-700">Số sao</th>
                       <th className="px-6 py-4 text-sm font-semibold text-slate-700">Lý do / Ghi chú</th>
-                      <th className="px-6 py-4 text-sm font-semibold text-slate-700">Người đánh giá</th>
+                      <th className="px-6 py-4 text-sm font-semibold text-slate-700">Người thực hiện</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -215,14 +225,56 @@ export default function Reports({ user }: { user: any }) {
                               <span className="ml-2 text-sm font-bold text-slate-700">{ev.stars}</span>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-sm text-slate-600">{ev.reason_text || '-'}</td>
-                          <td className="px-6 py-4 text-sm text-slate-600">{ev.evaluator_name}</td>
+                          <td className="px-6 py-4 text-sm text-slate-600">{ev.reason_text || ev.note || '-'}</td>
+                          <td className="px-6 py-4 text-sm text-slate-600">
+                            <span className={cn(
+                              "px-2 py-0.5 rounded-md text-[10px] font-bold",
+                              ev.evaluator_name === 'Hệ thống' ? "bg-slate-100 text-slate-500" : "bg-indigo-50 text-indigo-600"
+                            )}>
+                              {ev.evaluator_name}
+                            </span>
+                          </td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile Card List */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {detailData.evaluations.length === 0 ? (
+                  <div className="px-6 py-10 text-center text-slate-400 text-sm">Không có dữ liệu đánh giá</div>
+                ) : (
+                  detailData.evaluations.map((ev: any) => (
+                    <div key={ev.id} className="p-4 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-bold text-slate-900">{ev.date}</span>
+                        <div className="flex items-center gap-1 bg-amber-50 px-2 py-1 rounded-lg">
+                          <Star size={14} className="fill-amber-400 text-amber-400" />
+                          <span className="text-sm font-black text-amber-700">{ev.stars}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 leading-relaxed">
+                        <p className="font-semibold text-slate-400 text-[10px] uppercase tracking-wider mb-1">Lý do / Ghi chú</p>
+                        {ev.reason_text || ev.note || <span className="italic text-slate-400">Không có ghi chú</span>}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Người thực hiện</span>
+                         <span className={cn(
+                           "text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-tighter",
+                           ev.evaluator_name === 'Hệ thống' ? "bg-slate-100 text-slate-400" : "bg-indigo-50 text-indigo-600"
+                         )}>
+                           {ev.evaluator_name}
+                         </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
             </div>
           </div>
         ) : (
@@ -297,11 +349,12 @@ export default function Reports({ user }: { user: any }) {
           </div>
           <button
             onClick={exportToExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
+            className="btn-success"
           >
             <Download size={18} />
-            <span className="hidden sm:inline">Xuất Excel</span>
+            <span>Xuất Excel</span>
           </button>
+
         </div>
       </div>
 
@@ -444,25 +497,26 @@ export default function Reports({ user }: { user: any }) {
               <tr className="bg-slate-50 border-b border-slate-200">
                 {view === 'EMPLOYEE' ? (
                   <>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-700 w-16">Hạng</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-700">Mã NV</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-700">Họ tên</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-700">Chi nhánh</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-700">Phòng ban</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-700 text-center">Tổng sao</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-700 text-center">Số ngày</th>
+                    <th className="px-4 md:px-6 py-4 text-sm font-semibold text-slate-700 w-12 md:w-16">#</th>
+                    <th className="hidden sm:table-cell px-6 py-4 text-sm font-semibold text-slate-700">Mã NV</th>
+                    <th className="px-4 md:px-6 py-4 text-sm font-semibold text-slate-700">Họ tên</th>
+                    <th className="hidden lg:table-cell px-6 py-4 text-sm font-semibold text-slate-700">Chi nhánh</th>
+                    <th className="hidden md:table-cell px-6 py-4 text-sm font-semibold text-slate-700">Phòng ban</th>
+                    <th className="px-4 md:px-6 py-4 text-sm font-semibold text-slate-700 text-center">Sao</th>
+                    <th className="hidden sm:table-cell px-6 py-4 text-sm font-semibold text-slate-700 text-center">Ngày</th>
                   </>
                 ) : (
                   <>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-700 w-16">Hạng</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-700">Phòng ban</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-700 text-center">Tổng nhân viên</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-700 text-center">Tổng sao</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-700 text-center">Trung bình sao/NV</th>
+                    <th className="px-4 md:px-6 py-4 text-sm font-semibold text-slate-700 w-12 md:w-16">#</th>
+                    <th className="px-4 md:px-6 py-4 text-sm font-semibold text-slate-700">Phòng ban</th>
+                    <th className="hidden sm:table-cell px-6 py-4 text-sm font-semibold text-slate-700 text-center">NV</th>
+                    <th className="px-4 md:px-6 py-4 text-sm font-semibold text-slate-700 text-center">Sao</th>
+                    <th className="hidden md:table-cell px-6 py-4 text-sm font-semibold text-slate-700 text-center">Trung bình</th>
                   </>
                 )}
               </tr>
             </thead>
+
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr><td colSpan={8} className="px-6 py-20 text-center text-slate-400">Đang tải dữ liệu...</td></tr>
@@ -477,45 +531,55 @@ export default function Reports({ user }: { user: any }) {
                   >
                     {view === 'EMPLOYEE' ? (
                       <>
-                        <td className="px-6 py-4 text-sm font-bold text-slate-500">
-                          <div className="flex items-center gap-2">
-                            {index === 0 && <Trophy size={16} className="text-amber-500" />}
-                            {index === 1 && <Medal size={16} className="text-slate-400" />}
-                            {index === 2 && <Medal size={16} className="text-amber-700" />}
+                        <td className="px-4 md:px-6 py-4 text-sm font-bold text-slate-500">
+                          <div className="flex items-center gap-1 md:gap-2">
+                            {index === 0 && <Trophy size={14} className="text-amber-500" />}
+                            {index === 1 && <Medal size={14} className="text-slate-400" />}
+                            {index === 2 && <Medal size={14} className="text-amber-700" />}
                             <span>{index + 1}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-600 font-mono">{row.employee_code}</td>
-                        <td className="px-6 py-4 text-sm font-medium text-slate-900">{row.full_name}</td>
-                        <td className="px-6 py-4 text-sm text-slate-600">{row.branch_name}</td>
-                        <td className="px-6 py-4 text-sm text-slate-600">{row.department_name}</td>
-                        <td className="px-6 py-4 text-sm text-center font-bold text-amber-600">{row.total_stars || 0}</td>
-                        <td className="px-6 py-4 text-sm text-center text-slate-600">{row.days_evaluated}</td>
+                        <td className="hidden sm:table-cell px-6 py-4 text-[10px] md:text-sm text-slate-600 font-mono italic">{row.employee_code}</td>
+                        <td className="px-4 md:px-6 py-3 md:py-4">
+                          <div className="text-sm font-bold text-slate-900 leading-tight">{row.full_name}</div>
+                          <div className="md:hidden flex flex-col gap-0.5 mt-1">
+                            <div className="text-[10px] text-slate-400 font-medium truncate max-w-[120px]">{row.branch_name}</div>
+                            <div className="text-[10px] text-indigo-500 font-bold truncate max-w-[120px]">{row.department_name}</div>
+                          </div>
+                        </td>
+                        <td className="hidden lg:table-cell px-6 py-4 text-sm text-slate-600">{row.branch_name}</td>
+                        <td className="hidden md:table-cell px-6 py-4 text-sm text-slate-600">{row.department_name}</td>
+                        <td className="px-4 md:px-6 py-4 text-sm text-center font-black text-amber-600bg-amber-50/50 rounded-xl">{row.total_stars || 0}</td>
+                        <td className="hidden sm:table-cell px-6 py-4 text-sm text-center text-slate-600">{row.days_evaluated}</td>
                       </>
                     ) : (
                       <>
-                        <td className="px-6 py-4 text-sm font-bold text-slate-500">
-                          <div className="flex items-center gap-2">
-                            {index === 0 && <Trophy size={16} className="text-amber-500" />}
+                        <td className="px-4 md:px-6 py-4 text-sm font-bold text-slate-500">
+                          <div className="flex items-center gap-1 md:gap-2">
+                            {index === 0 && <Trophy size={14} className="text-amber-500" />}
                             <span>{index + 1}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-                              <Building2 size={18} />
+                        <td className="px-4 md:px-6 py-4">
+                          <div className="flex items-center gap-2 md:gap-3">
+                            <div className="p-1.5 md:p-2 bg-indigo-50 text-indigo-600 rounded-lg shrink-0">
+                              <Building2 size={16} />
                             </div>
-                            <span className="text-sm font-medium text-slate-900">{row.department_name}</span>
+                            <div className="min-w-0">
+                               <div className="text-sm font-bold text-slate-900 truncate">{row.department_name}</div>
+                               <div className="sm:hidden text-[10px] text-slate-400 font-medium">NV: {row.total_employees}</div>
+                            </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-center text-slate-600 font-medium">{row.total_employees}</td>
-                        <td className="px-6 py-4 text-sm text-center font-bold text-amber-600">{row.total_stars || 0}</td>
-                        <td className="px-6 py-4 text-sm text-center text-slate-600">
+                        <td className="hidden sm:table-cell px-6 py-4 text-sm text-center text-slate-600 font-medium">{row.total_employees}</td>
+                        <td className="px-4 md:px-6 py-4 text-sm text-center font-black text-amber-600">{row.total_stars || 0}</td>
+                        <td className="hidden md:table-cell px-6 py-4 text-sm text-center text-slate-600">
                           {row.total_employees > 0 ? (row.total_stars / row.total_employees).toFixed(2) : 0}
                         </td>
                       </>
                     )}
                   </tr>
+
                 ))
               )}
             </tbody>

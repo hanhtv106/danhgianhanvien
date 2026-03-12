@@ -111,17 +111,17 @@ export default function Permissions() {
     const actions = ['view', 'create', 'edit', 'delete'];
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="space-y-6 pb-24 md:pb-0">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-900">Thiết lập Phân quyền</h2>
-                    <p className="text-slate-500">Quản lý chi tiết quyền hạn cho từng vai trò trong hệ thống</p>
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Thiết lập Phân quyền</h2>
+                    <p className="text-sm text-slate-500">Quản lý chi tiết quyền hạn cho từng vai trò</p>
                 </div>
                 {selectedRoleId && (
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-semibold shadow-lg shadow-indigo-200 disabled:opacity-50"
+                        className="hidden md:flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-bold shadow-lg shadow-indigo-200 disabled:opacity-50 active:scale-95"
                     >
                         {saving ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> : <Save size={18} />}
                         <span>Lưu thay đổi</span>
@@ -214,6 +214,20 @@ export default function Permissions() {
                     </div>
                 </div>
             </div>
+
+            {/* Mobile Fixed Save Button */}
+            {selectedRoleId && (
+                <div className="md:hidden fixed bottom-6 left-6 right-6 z-40 animate-in slide-in-from-bottom-5 duration-500">
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="w-full h-14 flex items-center justify-center gap-3 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-2xl shadow-indigo-300 active:scale-95 disabled:opacity-50 transition-all"
+                    >
+                        {saving ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div> : <Save size={20} />}
+                        <span>Lưu thay đổi</span>
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

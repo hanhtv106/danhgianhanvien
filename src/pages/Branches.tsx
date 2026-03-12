@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, MapPin } from 'lucide-react';
+import { Plus, Trash2, Edit2, MapPin, Search } from 'lucide-react';
 import { apiFetch } from '../services/api';
 import { Branch } from '../types';
 
-export default function Branches() {
+export default function Branches({ user }: { user: any }) {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [name, setName] = useState('');
+  const [searchText, setSearchText] = useState('');
 
   const fetchData = async () => {
     try {
@@ -61,20 +62,45 @@ export default function Branches() {
     }
   };
 
+  const filteredBranches = branches.filter(branch =>
+    branch.name.toLowerCase().includes(searchText.toLowerCase())
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Quản lý Chi nhánh</h2>
           <p className="text-slate-500">Danh sách các chi nhánh của công ty</p>
         </div>
         <button
           onClick={() => handleOpenModal()}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
+          className="btn-primary"
         >
           <Plus size={18} />
           <span>Thêm chi nhánh</span>
         </button>
+
+      </div>
+
+      {/* Filter Bar */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-white rounded-3xl border border-slate-200 shadow-sm max-w-2xl">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+            type="text"
+            placeholder="Tìm theo tên chi nhánh..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
+          />
+        </div>
+
+        <div className="flex items-center md:justify-end px-2">
+          <p className="text-xs text-slate-400 font-medium">
+            Hiển thị: <span className="text-indigo-600 font-bold">{filteredBranches.length}</span> chi nhánh
+          </p>
+        </div>
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm max-w-2xl">
@@ -83,27 +109,20 @@ export default function Branches() {
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="px-6 py-4 text-sm font-semibold text-slate-700">ID</th>
               <th className="px-6 py-4 text-sm font-semibold text-slate-700">Tên chi nhánh</th>
-              <th className="px-6 py-4 text-sm font-semibold text-slate-700 text-right">Thao tác</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {branches.map((branch) => (
-              <tr key={branch.id} className="hover:bg-slate-50 transition-colors">
+            {filteredBranches.map((branch) => (
+              <tr 
+                key={branch.id} 
+                className="hover:bg-indigo-50/30 transition-all cursor-pointer group"
+                onClick={() => handleOpenModal(branch)}
+              >
                 <td className="px-6 py-4 text-sm text-slate-500">{branch.id}</td>
-                <td className="px-6 py-4 text-sm font-medium text-slate-900">
+                <td className="px-6 py-4 text-sm font-medium text-slate-900 group-hover:text-indigo-600 transition-colors">
                   <div className="flex items-center gap-2">
                     <MapPin size={16} className="text-slate-400" />
                     {branch.name}
-                  </div>
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => handleOpenModal(branch)} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors">
-                      <Edit2 size={18} />
-                    </button>
-                    <button onClick={() => handleDelete(branch.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors">
-                      <Trash2 size={18} />
-                    </button>
                   </div>
                 </td>
               </tr>
@@ -128,9 +147,39 @@ export default function Branches() {
                   placeholder="VD: Chi nhánh Hà Nội"
                 />
               </div>
-              <div className="flex justify-end gap-3 mt-8">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2.5 text-slate-600 hover:bg-slate-50 rounded-xl transition-colors font-medium">Hủy</button>
-                <button type="submit" className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-lg shadow-indigo-200">Lưu</button>
+              <div className="flex justify-between items-center mt-8">
+                <div>
+                  {editingBranch && (
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        handleDelete(editingBranch.id);
+                        setIsModalOpen(false);
+                      }} 
+                      className="btn-danger"
+                    >
+                      <Trash2 size={18} />
+                      <span>Xóa</span>
+                    </button>
+
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <button 
+                    type="button" 
+                    onClick={() => setIsModalOpen(false)} 
+                    className="btn-secondary"
+                  >
+                    Hủy
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn-primary"
+                  >
+                    Lưu
+                  </button>
+
+                </div>
               </div>
             </form>
           </div>

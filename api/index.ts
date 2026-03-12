@@ -130,6 +130,11 @@ app.post("/api/change-password", authenticate, async (req, res) => {
       return res.status(400).json({ error: "Mật khẩu cũ không đúng" });
     }
 
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      return res.status(400).json({ error: "Mật khẩu mới không đủ mạnh (tối thiểu 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt)" });
+    }
+
     const hashedNewPassword = bcrypt.hashSync(newPassword, 10);
     await supabase.from('users').update({ password: hashedNewPassword }).eq('id', userId);
     res.json({ success: true });
@@ -159,10 +164,23 @@ app.get("/api/users", authenticate, async (req, res) => {
 
 app.post("/api/users", authenticate, async (req, res) => {
   const { username, password, full_name, role, role_id, department_id, branch_id } = req.body;
+  const currentUser = (req as any).user;
+
+  // Validation
+  const lowerUsername = (username || '').toLowerCase();
+  const usernameRegex = /^[a-z0-9@.]{5,24}$/;
+  if (!usernameRegex.test(lowerUsername)) {
+    return res.status(400).json({ error: "Tên tài khoản phải từ 5-24 ký tự, chỉ chứa chữ cái thường, số, @ và dấu chấm." });
+  }
+
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
+  if (!passwordRegex.test(password)) {
+    return res.status(400).json({ error: "Mật khẩu phải tối thiểu 8 ký tự, bao gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt (!@#$%^&*)" });
+  }
   const hashedPassword = bcrypt.hashSync(password, 10);
   try {
     const { data, error } = await supabase.from('users').insert({
-      username, password: hashedPassword, full_name, role, role_id,
+      username: lowerUsername, password: hashedPassword, full_name, role, role_id,
       department_id: department_id || null,
       branch_id: branch_id || null
     }).select('id').single();
@@ -177,8 +195,23 @@ app.post("/api/users", authenticate, async (req, res) => {
 app.put("/api/users/:id", authenticate, async (req, res) => {
   const { username, password, full_name, role, role_id, department_id, branch_id } = req.body;
   const { id } = req.params;
+
+  // Validation
+  const lowerUsername = (username || '').toLowerCase();
+  const usernameRegex = /^[a-z0-9@.]{5,24}$/;
+  if (!usernameRegex.test(lowerUsername)) {
+    return res.status(400).json({ error: "Tên tài khoản phải từ 5-24 ký tự, chỉ chứa chữ cái thường, số, @ và dấu chấm." });
+  }
+
+  if (password) {
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({ error: "Mật khẩu phải tối thiểu 8 ký tự, bao gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt (!@#$%^&*)" });
+    }
+  }
+
   try {
-    const updates: any = { username, full_name, role, role_id, department_id: department_id || null, branch_id: branch_id || null };
+    const updates: any = { username: lowerUsername, full_name, role, role_id, department_id: department_id || null, branch_id: branch_id || null };
     if (password) updates.password = bcrypt.hashSync(password, 10);
 
     const { error } = await supabase.from('users').update(updates).eq('id', id);
@@ -255,26 +288,64 @@ app.delete("/api/departments/:id", authenticate, async (req, res) => {
 });
 
 app.get("/api/reasons", authenticate, async (req, res) => {
-  const { data } = await supabase.from('star_reasons').select('id, stars, reason_text, created_by');
-  res.json(data || []);
+  const user = (req as any).user;
+  let query = supabase.from('star_reasons')
+    .select('id, stars, reason_text, created_by, department_id, departments(name, branch_id), created_by_user:users!star_reasons_created_by_fkey(full_name)');
+
+  if (user.role === 'ADMIN') {
+    if (user.branch_id) {
+      query = query.or(`department_id.is.null,departments.branch_id.eq.${user.branch_id}`);
+    }
+  } else if (user.role === 'USER') {
+    if (user.department_id) {
+      query = query.or(`department_id.is.null,department_id.eq.${user.department_id}`);
+    }
+  }
+
+  const { data } = await query;
+  const rows = (data || []).map((r: any) => ({
+    ...r,
+    department_name: r.departments?.name,
+    created_by_name: r.created_by_user?.full_name
+  }));
+  res.json(rows);
 });
 app.post("/api/reasons", authenticate, async (req, res) => {
-  const { stars, reason_text } = req.body;
+  const { stars, reason_text, department_id } = req.body;
   const user = (req as any).user;
-  const { data, error } = await supabase.from('star_reasons').insert({
-    stars, reason_text, created_by: user.id
-  }).select('*').single();
+  
+  let final_department_id = department_id || null;
+  const { data: insertedData, error } = await supabase.from('star_reasons').insert({
+    stars, reason_text, created_by: user.id, department_id: final_department_id
+  }).select('*, departments(name)').single();
+  
   if (error) return res.status(400).json({ error: "Lỗi khi thêm lý do" });
-  res.json(data);
+  
+  const { data: creator } = await supabase.from('users').select('full_name').eq('id', user.id).single();
+  res.json({
+    ...insertedData,
+    department_name: (insertedData as any).departments?.name,
+    created_by_name: creator?.full_name || user.full_name
+  });
 });
 app.put("/api/reasons/:id", authenticate, async (req, res) => {
   const user = (req as any).user;
   const { id } = req.params;
   const { stars, reason_text } = req.body;
 
-  const { data: reason } = await supabase.from('star_reasons').select('created_by').eq('id', id).single();
+  const { data: reason } = await supabase.from('star_reasons').select('created_by, department_id, departments(branch_id)').eq('id', id).single();
   if (!reason) return res.status(404).json({ error: "Lý do không tồn tại" });
-  if (user.role !== 'SUPER_ADMIN' && reason.created_by !== user.id) {
+  
+  let canEdit = user.role === 'SUPER_ADMIN' || user.permissions?.includes('reasons:edit') || reason.created_by === user.id;
+
+  if (user.role === 'ADMIN') {
+    if ((reason as any).departments?.branch_id !== user.branch_id) canEdit = false;
+  } else if (user.role === 'USER') {
+    // Users cannot edit global reasons (department_id is null) or reasons from other departments
+    if (reason.department_id === null || reason.department_id !== user.department_id) canEdit = false;
+  }
+
+  if (!canEdit) {
     return res.status(403).json({ error: "Bạn không có quyền sửa lý do này" });
   }
 
@@ -285,9 +356,19 @@ app.delete("/api/reasons/:id", authenticate, async (req, res) => {
   const user = (req as any).user;
   const { id } = req.params;
 
-  const { data: reason } = await supabase.from('star_reasons').select('created_by').eq('id', id).single();
+  const { data: reason } = await supabase.from('star_reasons').select('created_by, department_id, departments(branch_id)').eq('id', id).single();
   if (!reason) return res.status(404).json({ error: "Lý do không tồn tại" });
-  if (user.role !== 'SUPER_ADMIN' && reason.created_by !== user.id) {
+
+  let canDelete = user.role === 'SUPER_ADMIN' || user.permissions?.includes('reasons:delete') || reason.created_by === user.id;
+
+  if (user.role === 'ADMIN') {
+    if ((reason as any).departments?.branch_id !== user.branch_id) canDelete = false;
+  } else if (user.role === 'USER') {
+    // Users cannot delete global reasons (department_id is null) or reasons from other departments
+    if (reason.department_id === null || reason.department_id !== user.department_id) canDelete = false;
+  }
+
+  if (!canDelete) {
     return res.status(403).json({ error: "Bạn không có quyền xóa lý do này" });
   }
 
@@ -762,7 +843,7 @@ app.get("/api/reports/employee/:id", authenticate, async (req, res) => {
       const reasons = ev.evaluation_reasons_junction?.map((erj: any) => erj.star_reasons?.reason_text) || [];
       return {
         ...ev,
-        evaluator_name: ev.users?.full_name,
+        evaluator_name: ev.users?.full_name || 'Hệ thống',
         reason_text: reasons.join(', ')
       };
     });

@@ -110,11 +110,11 @@ export default function App() {
       {activeTab === 'dashboard' && <Dashboard />}
       {activeTab === 'evaluation' && <EvaluationPage user={user} />}
       {activeTab === 'reports' && <Reports user={user} />}
-      {activeTab === 'employees' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('employees:view')) && <Employees />}
-      {activeTab === 'branches' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('branches:view')) && <Branches />}
-      {activeTab === 'departments' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('departments:view')) && <Departments />}
+      {activeTab === 'employees' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('employees:view')) && <Employees user={user} />}
+      {activeTab === 'branches' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('branches:view')) && <Branches user={user} />}
+      {activeTab === 'departments' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('departments:view')) && <Departments user={user} />}
       {activeTab === 'reasons' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('reasons:view')) && <Reasons user={user} />}
-      {activeTab === 'users' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('users:view')) && <UsersPage />}
+      {activeTab === 'users' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('users:view')) && <UsersPage user={user} />}
       {activeTab === 'permissions' && (user.role === 'SUPER_ADMIN' || user.permissions?.includes('users:edit')) && <Permissions />}
     </Layout>
   );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Building2, MapPin, Trophy, Star, ChevronUp, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, MapPin, Trophy, Star, ChevronUp, ChevronDown, Calendar as CalendarIcon } from 'lucide-react';
 import { apiFetch } from '../services/api';
 
 export default function Dashboard() {
@@ -87,8 +87,9 @@ export default function Dashboard() {
                             <div className="space-y-3">
                                 {data.branch_breakdown.map((b: any, i: number) => (
                                     <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
-                                        <span className="font-medium text-slate-700 text-sm truncate max-w-[150px]">{b.name}</span>
-                                        <span className="font-black text-slate-900 bg-white px-3 py-1 rounded-xl shadow-sm text-sm">{b.count}</span>
+                                        <span className="font-medium text-slate-700 text-sm truncate flex-1 pr-2">{b.name}</span>
+                                        <span className="font-black text-slate-900 bg-white px-3 py-1 rounded-xl shadow-sm text-sm shrink-0">{b.count}</span>
+
                                     </div>
                                 ))}
                                 {data.branch_breakdown.length === 0 && <p className="text-sm text-slate-400 italic">Chưa có dữ liệu</p>}
@@ -99,8 +100,9 @@ export default function Dashboard() {
                             <div className="space-y-3">
                                 {data.department_breakdown.map((d: any, i: number) => (
                                     <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
-                                        <span className="font-medium text-slate-700 text-sm truncate max-w-[150px]">{d.name}</span>
-                                        <span className="font-black text-slate-900 bg-white px-3 py-1 rounded-xl shadow-sm text-sm">{d.count}</span>
+                                        <span className="font-medium text-slate-700 text-sm truncate flex-1 pr-2">{d.name}</span>
+                                        <span className="font-black text-slate-900 bg-white px-3 py-1 rounded-xl shadow-sm text-sm shrink-0">{d.count}</span>
+
                                     </div>
                                 ))}
                                 {data.department_breakdown.length === 0 && <p className="text-sm text-slate-400 italic">Chưa có dữ liệu</p>}
@@ -197,7 +199,4 @@ export default function Dashboard() {
     );
 }
 
-// Need to define a minimal CalendarIcon just in case to fix previous missing import inline
-const CalendarIcon = ({ className }: { className?: string }) => (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2" /><line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" /><line x1="3" x2="21" y1="10" y2="10" /></svg>
-);
+
