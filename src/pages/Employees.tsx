@@ -4,13 +4,27 @@ import { apiFetch } from '../services/api';
 import { Employee, Department, Branch } from '../types';
 import * as XLSX from 'xlsx';
 import { cn } from '../lib/utils';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export default function Employees({ user }: { user: any }) {
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
+  const queryClient = useQueryClient();
+
+  const { data: employees = [] } = useQuery<Employee[]>({
+    queryKey: ['employees'],
+    queryFn: () => apiFetch('/api/employees')
+  });
+
+  const { data: branches = [] } = useQuery<Branch[]>({
+    queryKey: ['branches'],
+    queryFn: () => apiFetch('/api/branches')
+  });
+
+  const { data: departments = [] } = useQuery<Department[]>({
+    queryKey: ['departments'],
+    queryFn: () => apiFetch('/api/departments')
+  });
   
-  // Filter states
+  // Local States
   const [searchText, setSearchText] = useState('');
   const [selectedBranch, setSelectedBranch] = useState(user.role !== 'SUPER_ADMIN' ? (user.branch_id?.toString() || 'all') : 'all');
   const [selectedDept, setSelectedDept] = useState(user.role === 'USER' ? (user.department_id?.toString() || 'all') : 'all');
@@ -35,20 +49,46 @@ export default function Employees({ user }: { user: any }) {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchData = async () => {
-    const [empData, deptData, branchData] = await Promise.all([
-      apiFetch('/api/employees'),
-      apiFetch('/api/departments'),
-      apiFetch('/api/branches')
-    ]);
-    setEmployees(empData);
-    setDepartments(deptData);
-    setBranches(branchData);
-  };
+  // Mutations
+  const createUpdateMutation = useMutation({
+    mutationFn: async ({ url, method, data }: { url: string, method: string, data: any }) => {
+      return apiFetch(url, { method, body: JSON.stringify(data) });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      setIsModalOpen(false);
+      showToast(variables.method === 'PUT' ? 'Cập nhật nhân viên thành công!' : 'Thêm nhân viên thành công!');
+    },
+    onError: (error: any) => {
+      showToast(error.message, 'error');
+    }
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiFetch(`/api/employees/${id}`, { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      showToast('Đã xóa nhân viên thành công!');
+    },
+    onError: () => {
+      showToast('Lỗi khi xóa nhân viên', 'error');
+    }
+  });
+
+  const importMutation = useMutation({
+    mutationFn: async (validRows: any[]) => {
+      return apiFetch('/api/employees/import', { method: 'POST', body: JSON.stringify({ data: validRows }) });
+    },
+    onSuccess: (_, validRows: any[]) => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      showToast(`Đã import thành công ${validRows.length} nhân viên`);
+    },
+    onError: (error: any) => {
+      showToast('Lỗi khi import: ' + error.message, 'error');
+    }
+  });
 
   const handleOpenModal = (emp?: Employee) => {
     if (emp) {
@@ -56,11 +96,11 @@ export default function Employees({ user }: { user: any }) {
       setFormData({
         employee_code: emp.employee_code,
         full_name: emp.full_name,
-        department_id: emp.department_id.toString(),
-        branch_id: emp.branch_id.toString(),
-        cccd: emp.cccd,
+        department_id: emp.department_id ? emp.department_id.toString() : '',
+        branch_id: emp.branch_id ? emp.branch_id.toString() : '',
+        cccd: emp.cccd || '',
         email: emp.email || '',
-        is_resigned: emp.is_resigned,
+        is_resigned: emp.is_resigned || false,
         created_at: emp.created_at ? new Date(emp.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
       });
     } else {
@@ -68,8 +108,8 @@ export default function Employees({ user }: { user: any }) {
       setFormData({
         employee_code: '',
         full_name: '',
-        department_id: departments[0]?.id.toString() || '',
-        branch_id: branches[0]?.id.toString() || '',
+        department_id: '',
+        branch_id: '',
         cccd: '',
         email: '',
         is_resigned: false,
@@ -78,12 +118,13 @@ export default function Employees({ user }: { user: any }) {
     }
     setIsModalOpen(true);
   };
+
   const handleViewDetail = (emp: Employee) => {
     setSelectedEmployee(emp);
     setIsDetailModalOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.department_id) {
@@ -98,28 +139,12 @@ export default function Employees({ user }: { user: any }) {
     const url = editingEmployee ? `/api/employees/${editingEmployee.id}` : '/api/employees';
     const method = editingEmployee ? 'PUT' : 'POST';
 
-    try {
-      await apiFetch(url, {
-        method,
-        body: JSON.stringify(formData),
-      });
-      setIsModalOpen(false);
-      fetchData();
-      showToast(editingEmployee ? 'Cập nhật nhân viên thành công!' : 'Thêm nhân viên thành công!');
-    } catch (err: any) {
-      showToast(err.message, 'error');
-    }
+    createUpdateMutation.mutate({ url, method, data: formData });
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = (id: number) => {
     if (confirm('Bạn có chắc chắn muốn xóa nhân viên này?')) {
-      try {
-        await apiFetch(`/api/employees/${id}`, { method: 'DELETE' });
-        fetchData();
-        showToast('Đã xóa nhân viên thành công!');
-      } catch (err: any) {
-        showToast('Lỗi khi xóa nhân viên', 'error');
-      }
+      deleteMutation.mutate(id);
     }
   };
 
@@ -163,13 +188,10 @@ export default function Employees({ user }: { user: any }) {
       });
 
       if (validRows.length > 0) {
-        apiFetch('/api/employees/import', {
-          method: 'POST',
-          body: JSON.stringify({ data: validRows })
-        }).then(() => {
-          fetchData();
-          alert(`Đã import thành công ${validRows.length} nhân viên.${errorRows.length > 0 ? `\n\nCó ${errorRows.length} dòng bị lỗi và bị bỏ qua.` : ''}`);
-        });
+        importMutation.mutate(validRows);
+        if (errorRows.length > 0) {
+          alert(`Tuy nhiên, có ${errorRows.length} dòng bị lỗi và bị bỏ qua.`);
+        }
       } else if (errorRows.length > 0) {
         alert('Không tìm thấy dữ liệu hợp lệ để import. Vui lòng kiểm tra lại tên Phòng ban và Chi nhánh.');
       }

@@ -2,25 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, Building2, MapPin, Trophy, Star, ChevronUp, ChevronDown, Calendar as CalendarIcon } from 'lucide-react';
 import { apiFetch } from '../services/api';
 
+import { useQuery } from '@tanstack/react-query';
+
 export default function Dashboard() {
-    const [data, setData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
+    const { data, isLoading } = useQuery({
+        queryKey: ['dashboard_overview'],
+        queryFn: () => apiFetch('/api/dashboard/overview')
+    });
 
-    useEffect(() => {
-        const fetchDashboard = async () => {
-            try {
-                const res = await apiFetch('/api/dashboard/overview');
-                setData(res);
-            } catch (err) {
-                console.error('Lỗi tải dữ liệu tổng quan:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchDashboard();
-    }, []);
-
-    if (loading) {
+    if (isLoading) {
         return <div className="text-center py-20 text-slate-400">Đang tải dữ liệu tổng quan...</div>;
     }
 

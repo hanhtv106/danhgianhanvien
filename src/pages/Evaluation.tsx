@@ -6,141 +6,152 @@ import { Branch, Department, Evaluation, StarReason, User } from '../types';
 import { format, subDays, addDays } from 'date-fns';
 import { cn } from '../lib/utils';
 
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
 export default function EvaluationPage({ user }: { user: User }) {
+  const queryClient = useQueryClient();
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
-  const [originalEvaluations, setOriginalEvaluations] = useState<Evaluation[]>([]);
-  const [reasons, setReasons] = useState<StarReason[]>([]);
-  const [loading, setLoading] = useState(false);
+  
+  // Filter states
+  const [selectedBranch, setSelectedBranch] = useState(user.role !== 'SUPER_ADMIN' ? (user.branch_id?.toString() || 'all') : 'all');
+  const [selectedDept, setSelectedDept] = useState('all');
+  const [searchText, setSearchText] = useState('');
+
+  const { data: branches = [] } = useQuery({
+    queryKey: ['branches'],
+    queryFn: () => apiFetch('/api/branches')
+  });
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ['departments'],
+    queryFn: () => apiFetch('/api/departments')
+  });
+
+  const queryParams = new URLSearchParams({
+    date: format(selectedDate, 'yyyy-MM-dd'),
+    branch_id: selectedBranch,
+    department_id: selectedDept,
+    search: searchText
+  });
+
+  const { data: rawReasons = [] } = useQuery({
+    queryKey: ['reasons'],
+    queryFn: () => apiFetch('/api/reasons')
+  });
+
+  const { data: evalData = [], isLoading: loading } = useQuery({
+    queryKey: ['evaluations', queryParams.toString()],
+    queryFn: async () => {
+      const response = await apiFetch(`/api/evaluations?${queryParams.toString()}`);
+      
+      // Auto save 3 stars logic
+      if (isDateAllowed(selectedDate)) {
+        const firstThreeStarReason = rawReasons.find((r: StarReason) => r.stars === 3);
+        
+        await Promise.all(response.map(async (ev: Evaluation) => {
+          if (ev.stars === null) {
+            try {
+              await apiFetch('/api/evaluations', {
+                method: 'POST',
+                body: JSON.stringify({
+                  employee_id: ev.employee_id,
+                  date: format(selectedDate, 'yyyy-MM-dd'),
+                  stars: 3,
+                  reason_ids: firstThreeStarReason ? [firstThreeStarReason.id] : [],
+                  note: ""
+                })
+              });
+            } catch (err) {
+              console.error("Tự động lưu thất bại:", err);
+            }
+          }
+        }));
+        
+        // After auto-save, we'd ideally want to refetch, but to avoid infinite loops in queryFn, 
+        // we'll just return the modified data for UI, and the next normal refetch will get real DB values.
+        return response.map((ev: Evaluation) => {
+           if (ev.stars === null) {
+              return {
+                 ...ev,
+                 stars: 3,
+                 reason_ids: firstThreeStarReason ? [firstThreeStarReason.id] : [],
+                 note: ""
+              };
+           }
+           return ev;
+        });
+      }
+      return response;
+    },
+    enabled: rawReasons.length > 0 // Wait for reasons to load first for auto-save logic
+  });
+
+  // Since we don't mutate state array directly anymore, we rely on cache. 
+  // We still need local state for temp editing
   const [activeEmpIdForReasons, setActiveEmpIdForReasons] = useState<number | null>(null);
   const [tempEvaluation, setTempEvaluation] = useState<Evaluation | null>(null);
-  const [dirtyIds, setDirtyIds] = useState<Set<number>>(new Set());
-  const [savingIds, setSavingIds] = useState<Set<number>>(new Set());
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+
+  // Derive evaluations and original evaluations purely from cache
+  const evaluations = evalData;
+  const originalEvaluations = evalData;
+  const reasons = rawReasons;
+
+
+  const isDateAllowed = (date: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const diffTime = today.getTime() - d.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 && diffDays <= 2;
+  };
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Filter states
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [selectedBranch, setSelectedBranch] = useState(user.role !== 'SUPER_ADMIN' ? (user.branch_id?.toString() || 'all') : 'all');
-  const [selectedDept, setSelectedDept] = useState('all');
-  const [searchText, setSearchText] = useState('');
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const queryParams = new URLSearchParams({
-        date: format(selectedDate, 'yyyy-MM-dd'),
-        branch_id: selectedBranch,
-        department_id: selectedDept,
-        search: searchText
+  const updateEvaluationMutation = useMutation({
+    mutationFn: async ({ employee_id, stars, reason_ids, note }: Partial<Evaluation> & { employee_id: number }) => {
+      return apiFetch('/api/evaluations', {
+        method: 'POST',
+        body: JSON.stringify({
+          employee_id,
+          date: format(selectedDate, 'yyyy-MM-dd'),
+          stars,
+          reason_ids,
+          note
+        })
       });
-
-      const [evalData, reasonData] = await Promise.all([
-        apiFetch(`/api/evaluations?${queryParams.toString()}`),
-        apiFetch('/api/reasons')
-      ]);
-      const processedEvals = await Promise.all(evalData.map(async (ev: Evaluation) => {
-        if (ev.stars === null && isDateAllowed(selectedDate)) {
-          const firstThreeStarReason = reasonData.find((r: StarReason) => r.stars === 3);
-          const autoValue = {
-            ...ev,
-            stars: 3,
-            reason_ids: firstThreeStarReason ? [firstThreeStarReason.id] : [],
-            note: ""
-          };
-
-          // Gọi API tự động lưu ngay lập tức
-          try {
-            await apiFetch('/api/evaluations', {
-              method: 'POST',
-              body: JSON.stringify({
-                employee_id: autoValue.employee_id,
-                date: format(selectedDate, 'yyyy-MM-dd'),
-                stars: autoValue.stars,
-                reason_ids: autoValue.reason_ids,
-                note: autoValue.note
-              })
-            });
-            return autoValue;
-          } catch (err) {
-            console.error("Tự động lưu thất bại:", err);
-            return autoValue; // Vẫn trả về giá trị mặc định ở client
-          }
-        }
-        return ev;
-      }));
-
-      setEvaluations(processedEvals);
-      setOriginalEvaluations(JSON.parse(JSON.stringify(processedEvals)));
-      setReasons(reasonData);
-      setDirtyIds(new Set());
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+    },
+    onMutate: () => {
+      // Optimistic ui start
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['evaluations', queryParams.toString()] });
+      showToast('Lưu đánh giá thành công!');
+      setActiveEmpIdForReasons(null);
+      setTempEvaluation(null);
+    },
+    onError: () => {
+      showToast('Lỗi khi lưu đánh giá. Vui lòng thử lại.', 'error');
     }
-  };
-
-  useEffect(() => {
-    const fetchFilters = async () => {
-      try {
-        const [bData, dData] = await Promise.all([
-          apiFetch('/api/branches'),
-          apiFetch('/api/departments')
-        ]);
-        setBranches(bData);
-        setDepartments(dData);
-      } catch (err) {
-        console.error('Lỗi tải bộ lọc:', err);
-      }
-    };
-    fetchFilters();
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [selectedDate, selectedBranch, selectedDept, searchText]);
+  });
 
   const handleStarClick = (employeeId: number, stars: number) => {
     if (!isDateAllowed(selectedDate)) return;
+    updateEvaluationMutation.mutate({ employee_id: employeeId, stars, reason_ids: [], note: '' });
+  };
 
+  const handleEditIntent = (employeeId: number) => {
+    if (!isDateAllowed(selectedDate)) return;
     const currentEv = evaluations.find(e => e.employee_id === employeeId);
-    if (!currentEv) return;
-
-    const shouldClear = currentEv.stars !== stars;
-    let newReasonIds = shouldClear ? [] : (currentEv.reason_ids || []);
-    let newNote = shouldClear ? "" : (currentEv.note || "");
-
-    if (stars === 3 && shouldClear) {
-      const firstThreeStarReason = reasons.find(r => r.stars === 3);
-      if (firstThreeStarReason) {
-        newReasonIds = [firstThreeStarReason.id];
-      }
+    if (currentEv) {
+      setTempEvaluation({ ...currentEv });
+      setActiveEmpIdForReasons(employeeId);
     }
-
-    setTempEvaluation({ ...currentEv, stars, reason_ids: newReasonIds, note: newNote });
-    setActiveEmpIdForReasons(employeeId);
-  };
-
-  const handleReasonToggle = (reasonId: number) => {
-    if (!tempEvaluation) return;
-
-    const currentReasons = tempEvaluation.reason_ids || [];
-    const newReasons = currentReasons.includes(reasonId)
-      ? currentReasons.filter(id => id !== reasonId)
-      : [...currentReasons, reasonId];
-
-    setTempEvaluation({ ...tempEvaluation, reason_ids: newReasons });
-  };
-
-  const handleNoteChange = (note: string) => {
-    if (!tempEvaluation) return;
-    setTempEvaluation({ ...tempEvaluation, note });
   };
 
   const handleTempStarClick = (stars: number) => {
@@ -148,7 +159,7 @@ export default function EvaluationPage({ user }: { user: User }) {
 
     const shouldClear = tempEvaluation.stars !== stars;
     let newReasonIds = shouldClear ? [] : (tempEvaluation.reason_ids || []);
-    let newNote = tempEvaluation.note || ""; // Keep note when changing stars
+    let newNote = tempEvaluation.note || "";
 
     if (stars === 3 && shouldClear) {
       const firstThreeStarReason = reasons.find(r => r.stars === 3);
@@ -159,70 +170,40 @@ export default function EvaluationPage({ user }: { user: User }) {
     setTempEvaluation({ ...tempEvaluation, stars, reason_ids: newReasonIds, note: newNote });
   };
 
-  const handleSave = async () => {
+  const handleReasonToggle = (reasonId: number) => {
     if (!tempEvaluation) return;
-    const employeeId = tempEvaluation.employee_id;
 
-    setSavingIds(prev => new Set(prev).add(employeeId));
-    try {
-      await apiFetch('/api/evaluations', {
-        method: 'POST',
-        body: JSON.stringify({
-          employee_id: employeeId,
-          date: format(selectedDate, 'yyyy-MM-dd'),
-          stars: tempEvaluation.stars || 3,
-          reason_ids: tempEvaluation.reason_ids || [],
-          note: tempEvaluation.note || ""
-        })
-      });
+    const currentReasons = tempEvaluation.reason_ids || [];
+    const newReasons = currentReasons.includes(reasonId)
+      ? currentReasons.filter(id => id !== reasonId)
+      : [...currentReasons, reasonId];
 
-      setEvaluations(prev => prev.map(ev =>
-        ev.employee_id === employeeId ? { ...tempEvaluation } : ev
-      ));
-      setOriginalEvaluations(prev => prev.map(original =>
-        original.employee_id === employeeId ? { ...tempEvaluation } : original
-      ));
-      setDirtyIds(prev => {
-        const next = new Set(prev);
-        next.delete(employeeId);
-        return next;
-      });
-      showToast('Đã lưu đánh giá thành công!');
-      setActiveEmpIdForReasons(null);
-      setTempEvaluation(null);
-    } catch (err) {
-      showToast('Lỗi khi lưu đánh giá. Vui lòng thử lại.', 'error');
-    } finally {
-      setSavingIds(prev => {
-        const next = new Set(prev);
-        next.delete(employeeId);
-        return next;
-      });
+    if (tempEvaluation.stars === 3 && newReasons.length > 2) {
+      showToast('Chỉ được chọn tối đa 2 lý do cho đánh giá 3 sao', 'error');
+      return;
     }
+
+    setTempEvaluation({ ...tempEvaluation, reason_ids: newReasons });
   };
 
-  const handleCancel = (employeeId: number) => {
-    const original = originalEvaluations.find(e => e.employee_id === employeeId);
-    if (!original) return;
+  const handleNoteChange = (note: string) => {
+    if (!tempEvaluation) return;
+    setTempEvaluation({ ...tempEvaluation, note });
+  };
 
-    setEvaluations(prev => prev.map(ev =>
-      ev.employee_id === employeeId ? { ...original } : ev
-    ));
-    setDirtyIds(prev => {
-      const next = new Set(prev);
-      next.delete(employeeId);
-      return next;
+  const handleSave = () => {
+    if (!tempEvaluation) return;
+    updateEvaluationMutation.mutate({
+       employee_id: tempEvaluation.employee_id,
+       stars: tempEvaluation.stars || 3,
+       reason_ids: tempEvaluation.reason_ids || [],
+       note: tempEvaluation.note || ""
     });
   };
 
-  const isDateAllowed = (date: Date) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    const diffTime = today.getTime() - d.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays >= 0 && diffDays <= 2;
+  const handleCancel = () => {
+    setTempEvaluation(null);
+    setActiveEmpIdForReasons(null);
   };
 
   const activeEvaluation = evaluations.find(e => e.employee_id === activeEmpIdForReasons);
@@ -549,7 +530,7 @@ export default function EvaluationPage({ user }: { user: User }) {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={savingIds.has(tempEvaluation.employee_id) || (tempEvaluation.stars !== null && (!tempEvaluation.reason_ids || tempEvaluation.reason_ids.length === 0))}
+                  disabled={updateEvaluationMutation.isPending || (tempEvaluation.stars !== null && (!tempEvaluation.reason_ids || tempEvaluation.reason_ids.length === 0))}
                   className={cn(
                     "btn-primary flex-[2]",
                     (tempEvaluation.stars === null || (tempEvaluation.reason_ids && tempEvaluation.reason_ids.length > 0))
@@ -557,7 +538,7 @@ export default function EvaluationPage({ user }: { user: User }) {
                       : "bg-slate-300 pointer-events-none shadow-none border-none"
                   )}
                 >
-                  {savingIds.has(tempEvaluation.employee_id) ? (
+                  {updateEvaluationMutation.isPending ? (
                     <RotateCcw className="animate-spin" size={20} />
                   ) : (
                     <>
