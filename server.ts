@@ -533,7 +533,7 @@ async function startServer() {
     const allTimeDiffDays = Math.ceil((allTimeEndObj.getTime() - allTimeStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
     let query = supabase.from('employees').select(`
-      id, employee_code, full_name, department_id, branch_id, cccd, is_resigned, created_at, updated_at,
+      id, employee_code, full_name, email, department_id, branch_id, cccd, is_resigned, created_at, updated_at,
       departments(name), branches(name),
       created_by_user:users!employees_created_by_fkey(full_name),
       updated_by_user:users!employees_updated_by_fkey(full_name)
@@ -592,7 +592,7 @@ async function startServer() {
   });
 
   app.post("/api/employees", authenticate, async (req, res) => {
-    const { employee_code, full_name, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
+    const { employee_code, full_name, email, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
     const user = (req as any).user;
 
     // RBAC validation
@@ -605,7 +605,7 @@ async function startServer() {
     }
 
     const { data, error } = await supabase.from('employees').insert({
-      employee_code, full_name, department_id, 
+      employee_code, full_name, email, department_id, 
       branch_id: user.role === 'ADMIN' ? user.branch_id : (branch_id || (user.role === 'USER' ? user.branch_id : null)), 
       cccd,
       is_resigned: is_resigned ? true : false,
@@ -624,6 +624,7 @@ async function startServer() {
       const records = data.map((emp: any) => ({
         employee_code: emp.employee_code,
         full_name: emp.full_name,
+        email: emp.email || '',
         department_id: emp.department_id,
         branch_id: emp.branch_id,
         cccd: emp.cccd || '',
@@ -639,7 +640,7 @@ async function startServer() {
   });
 
   app.put("/api/employees/:id", authenticate, async (req, res) => {
-    const { employee_code, full_name, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
+    const { employee_code, full_name, email, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
     const user = (req as any).user;
     const { id } = req.params;
 
@@ -660,7 +661,7 @@ async function startServer() {
     }
 
     const updateData: any = {
-      employee_code, full_name, department_id, branch_id, cccd,
+      employee_code, full_name, email, department_id, branch_id, cccd,
       is_resigned: is_resigned ? true : false,
       updated_by: user.id,
       updated_at: new Date().toISOString()

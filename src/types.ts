@@ -42,6 +42,7 @@ export interface Employee {
   stars_month?: number;
   stars_year?: number;
   stars_all_time?: number;
+  email?: string;
 }
 
 export interface StarReason {

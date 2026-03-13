@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS employees (
   department_id INT NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
   branch_id INT REFERENCES branches(id) ON DELETE SET NULL,
   cccd VARCHAR(50) NOT NULL,
+  email VARCHAR(255),
   is_resigned BOOLEAN DEFAULT FALSE
 );
 

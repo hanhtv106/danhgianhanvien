@@ -234,31 +234,7 @@ export default function EvaluationPage({ user }: { user: User }) {
           <h2 className="text-2xl font-bold text-slate-900">Đánh giá Nhân viên</h2>
           <p className="text-slate-500">Chấm sao hàng ngày cho nhân viên phòng ban</p>
         </div>
-        <div className="flex flex-col md:flex-row items-center gap-4">
-            <div className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <button
-                onClick={() => setSelectedDate(subDays(selectedDate, 1))}
-                className="btn-secondary h-10 w-10 !px-0 !rounded-lg border-none hover:bg-slate-100"
-              >
-                <ChevronLeft size={22} className="text-slate-400" />
-              </button>
-              <div className="flex items-center gap-2 px-6 font-bold text-slate-800 text-base">
-                <CalendarIcon size={20} className="text-indigo-500" />
-                <span>{format(selectedDate, 'dd/MM/yyyy')}</span>
-              </div>
-              <button
-                onClick={() => setSelectedDate(addDays(selectedDate, 1))}
-                className="btn-secondary h-10 w-10 !px-0 !rounded-lg border-none hover:bg-slate-100"
-              >
-                <ChevronRight size={22} className="text-slate-400" />
-              </button>
-
-            </div>
-            {!isDateAllowed(selectedDate) && (
-              <p className="text-xs text-red-500 font-medium text-center">Chỉ được đánh giá hôm nay và 2 ngày trước</p>
-            )}
-          </div>
-        </div>
+      </div>
 
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-white rounded-3xl border border-slate-200 shadow-sm">
@@ -315,8 +291,45 @@ export default function EvaluationPage({ user }: { user: User }) {
         </div>
       </div>
 
+      <div className="flex flex-col items-center gap-3 py-2">
+        <div className="flex items-center gap-3 bg-indigo-600 p-1.5 rounded-3xl shadow-lg shadow-indigo-200 overflow-hidden border-2 border-indigo-400">
+          <button
+            onClick={() => setSelectedDate(subDays(selectedDate, 1))}
+            className="flex items-center justify-center h-12 w-12 rounded-2xl bg-indigo-500/50 hover:bg-white/20 text-white transition-all active:scale-95"
+          >
+            <ChevronLeft size={28} />
+          </button>
+          
+          <div className="flex flex-col items-center px-8 text-white min-w-[200px]">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-0.5">
+              {(() => {
+                const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+                return days[selectedDate.getDay()];
+              })()}
+            </span>
+            <div className="flex items-center gap-2">
+              <CalendarIcon size={20} className="text-indigo-200" />
+              <span className="text-xl font-black tracking-tight">{format(selectedDate, 'dd/MM/yyyy')}</span>
+            </div>
+          </div>
 
-      <div className="relative overflow-hidden min-h-[400px]">
+          <button
+            onClick={() => setSelectedDate(addDays(selectedDate, 1))}
+            className="flex items-center justify-center h-12 w-12 rounded-2xl bg-indigo-500/50 hover:bg-white/20 text-white transition-all active:scale-95"
+          >
+            <ChevronRight size={28} />
+          </button>
+        </div>
+        {!isDateAllowed(selectedDate) && (
+          <div className="flex items-center gap-1.5 px-4 py-1.5 bg-red-50 text-red-600 rounded-full border border-red-100 animate-pulse">
+            <AlertCircle size={14} />
+            <p className="text-xs font-bold uppercase tracking-wide">Chế độ xem (Không thể sửa)</p>
+          </div>
+        )}
+      </div>
+
+
+      <div className="relative overflow-x-hidden min-h-[400px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={format(selectedDate, 'yyyy-MM-dd')}
@@ -346,7 +359,7 @@ export default function EvaluationPage({ user }: { user: User }) {
             ) : (
               <div className="grid grid-cols-1 gap-2">
                 {evaluations.map((ev) => (
-                  <div key={ev.employee_id} className="bg-white rounded-2xl border border-slate-200 p-2 md:p-4 shadow-sm hover:shadow-md transition-all">
+                  <div key={ev.employee_id} className="snap-center scroll-mt-24 sm:scroll-mt-32 w-full bg-white rounded-2xl border border-slate-200 p-2 md:p-4 shadow-sm hover:shadow-md transition-all">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-6">
                       <div className="flex items-center gap-3 sm:w-64 shrink-0">
                         <div className="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 text-indigo-600 rounded-xl sm:rounded-2xl flex items-center justify-center font-bold text-base sm:text-lg shrink-0">

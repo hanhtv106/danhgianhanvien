@@ -405,7 +405,7 @@ app.get("/api/employees", authenticate, async (req, res) => {
   const allTimeDiffDays = Math.ceil((allTimeEndObj.getTime() - allTimeStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
   let query = supabase.from('employees').select(`
-    id, employee_code, full_name, department_id, branch_id, cccd, is_resigned, created_at, updated_at,
+    id, employee_code, full_name, email, department_id, branch_id, cccd, is_resigned, created_at, updated_at,
     departments(name), branches(name),
     created_by_user:users!employees_created_by_fkey(full_name),
     updated_by_user:users!employees_updated_by_fkey(full_name)
@@ -464,10 +464,10 @@ app.get("/api/employees", authenticate, async (req, res) => {
 });
 
 app.post("/api/employees", authenticate, async (req, res) => {
-  const { employee_code, full_name, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
+  const { employee_code, full_name, email, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
   const user = (req as any).user;
   const { data, error } = await supabase.from('employees').insert({
-    employee_code, full_name, department_id, branch_id, cccd,
+    employee_code, full_name, email, department_id, branch_id, cccd,
     is_resigned: is_resigned ? true : false,
     created_by: user.id,
     created_at: created_at ? new Date(created_at).toISOString() : new Date().toISOString()
@@ -484,6 +484,7 @@ app.post("/api/employees/import", authenticate, async (req, res) => {
     const records = data.map((emp: any) => ({
       employee_code: emp.employee_code,
       full_name: emp.full_name,
+      email: emp.email || '',
       department_id: emp.department_id,
       branch_id: emp.branch_id,
       cccd: emp.cccd || '',
@@ -499,10 +500,10 @@ app.post("/api/employees/import", authenticate, async (req, res) => {
 });
 
 app.put("/api/employees/:id", authenticate, async (req, res) => {
-  const { employee_code, full_name, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
+  const { employee_code, full_name, email, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
   const user = (req as any).user;
   const updateData: any = {
-    employee_code, full_name, department_id, branch_id, cccd,
+    employee_code, full_name, email, department_id, branch_id, cccd,
     is_resigned: is_resigned ? true : false,
     updated_by: user.id,
     updated_at: new Date().toISOString()

@@ -24,6 +24,7 @@ export default function Employees({ user }: { user: any }) {
     department_id: '',
     branch_id: '',
     cccd: '',
+    email: '',
     is_resigned: false,
     created_at: new Date().toISOString().split('T')[0]
   });
@@ -58,6 +59,7 @@ export default function Employees({ user }: { user: any }) {
         department_id: emp.department_id.toString(),
         branch_id: emp.branch_id.toString(),
         cccd: emp.cccd,
+        email: emp.email || '',
         is_resigned: emp.is_resigned,
         created_at: emp.created_at ? new Date(emp.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
       });
@@ -69,6 +71,7 @@ export default function Employees({ user }: { user: any }) {
         department_id: departments[0]?.id.toString() || '',
         branch_id: branches[0]?.id.toString() || '',
         cccd: '',
+        email: '',
         is_resigned: false,
         created_at: new Date().toISOString().split('T')[0]
       });
@@ -151,6 +154,7 @@ export default function Employees({ user }: { user: any }) {
             department_id: dept.id,
             branch_id: branch.id,
             cccd: row['Số CCCD']?.toString() || '',
+            email: row['Email']?.toString() || '',
             is_resigned: row['Đã nghỉ việc'] === 'Có' || row['Đã nghỉ việc'] === true
           });
         } else {
@@ -179,6 +183,7 @@ export default function Employees({ user }: { user: any }) {
       {
         'Mã nhân viên': 'NV001',
         'Họ tên': 'Nguyễn Văn A',
+        'Email': 'nguyenvana@gmail.com',
         'Số CCCD': '012345678901',
         'Phòng ban': departments[0]?.name || 'Phòng Hành chính',
         'Chi nhánh': branches[0]?.name || 'Chi nhánh 1',
@@ -312,7 +317,7 @@ export default function Employees({ user }: { user: any }) {
                 <th className="px-4 md:px-6 py-4 text-sm font-semibold text-slate-700">Họ tên</th>
                 <th className="hidden md:table-cell px-6 py-4 text-sm font-semibold text-slate-700">Chi nhánh</th>
                 <th className="hidden md:table-cell px-6 py-4 text-sm font-semibold text-slate-700">Phòng ban</th>
-                <th className="hidden lg:table-cell px-6 py-4 text-sm font-semibold text-slate-700">CCCD</th>
+                <th className="hidden lg:table-cell px-6 py-4 text-sm font-semibold text-slate-700">Email</th>
                 <th className="px-4 md:px-6 py-4 text-sm font-semibold text-slate-700">Trạng thái</th>
               </tr>
 
@@ -346,7 +351,9 @@ export default function Employees({ user }: { user: any }) {
                       {emp.department_name}
                     </div>
                   </td>
-                  <td className="hidden lg:table-cell px-6 py-4 text-sm text-slate-500 font-mono italic">{emp.cccd}</td>
+                  <td className="hidden lg:table-cell px-6 py-4 text-sm text-slate-500 italic">
+                    {emp.email || '---'}
+                  </td>
                   <td className="px-4 md:px-6 py-4 text-sm">
                     <span className={cn(
                       "px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[11px] font-bold uppercase tracking-wider block w-fit",
@@ -436,6 +443,16 @@ export default function Employees({ user }: { user: any }) {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                    placeholder="example@gmail.com"
+                  />
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Số CCCD <span className="text-red-500">*</span></label>
                   <input
                     type="text"
@@ -445,6 +462,8 @@ export default function Employees({ user }: { user: any }) {
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                   />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Ngày gia nhập <span className="text-red-500">*</span></label>
                   <input
@@ -534,6 +553,10 @@ export default function Employees({ user }: { user: any }) {
                       <div className="flex items-center justify-between">
                         <span className="text-slate-400 flex items-center gap-2"><CreditCard size={14} /> CCCD:</span>
                         <span className="font-bold text-slate-700">{selectedEmployee.cccd}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 flex items-center gap-2"><span className="p-0.5 bg-indigo-50 text-indigo-500 rounded text-[10px] font-bold">@</span> Email:</span>
+                        <span className="font-bold text-indigo-600 italic">{selectedEmployee.email || '---'}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-slate-400 flex items-center gap-2"><MapPin size={14} /> Chi nhánh:</span>
