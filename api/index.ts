@@ -91,7 +91,7 @@ app.post("/api/login", async (req, res) => {
     const token = jwt.sign(user, JWT_SECRET);
 
     // Store the latest token to enforce single-device login
-    await supabase.from('users').update({
+    await supabase.from('users').update({ 
       current_token: token,
       last_active_at: new Date().toISOString()
     }).eq('id', userData.id);
@@ -107,9 +107,9 @@ app.post("/api/logout", authenticate, async (req, res) => {
   const userId = (req as any).user.id;
   try {
     // Clear token and active status immediately on manual logout
-    await supabase.from('users').update({
-      current_token: null,
-      last_active_at: null
+    await supabase.from('users').update({ 
+      current_token: null, 
+      last_active_at: null 
     }).eq('id', userId);
     res.json({ success: true });
   } catch (err) {
@@ -144,14 +144,31 @@ app.post("/api/change-password", authenticate, async (req, res) => {
 });
 
 app.get("/api/users", authenticate, async (req, res) => {
+  const user = (req as any).user;
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('users')
       .select('id, username, full_name, role, role_id, department_id, branch_id, departments(name), branches(name)');
 
+    if (user.role === 'ADMIN') {
+      if (user.branch_id) {
+        query = query.eq('branch_id', user.branch_id);
+      } else {
+        query = query.eq('id', user.id); // If admin has no branch context, they only see themselves? (Should not happen)
+      }
+    } else if (user.role === 'USER') {
+      if (user.department_id) {
+        query = query.eq('department_id', user.department_id);
+      } else {
+        query = query.eq('id', user.id);
+      }
+    }
+
+    const { data, error } = await query;
+
     if (error) throw error;
 
-    const rows = data.map((u: any) => ({
+    const rows = (data || []).map((u: any) => ({
       ...u,
       department_name: u.departments?.name,
       branch_name: u.branches?.name
@@ -177,12 +194,22 @@ app.post("/api/users", authenticate, async (req, res) => {
   if (!passwordRegex.test(password)) {
     return res.status(400).json({ error: "Mật khẩu phải tối thiểu 8 ký tự, bao gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt (!@#$%^&*)" });
   }
+
+  // RBAC check for creating users
+  if (currentUser.role === 'ADMIN') {
+    if (branch_id && parseInt(branch_id) !== currentUser.branch_id) {
+      return res.status(403).json({ error: "Bạn chỉ có thể tạo người dùng trong chi nhánh của mình" });
+    }
+  } else if (currentUser.role === 'USER') {
+    return res.status(403).json({ error: "Bạn không có quyền tạo người dùng" });
+  }
+
   const hashedPassword = bcrypt.hashSync(password, 10);
   try {
     const { data, error } = await supabase.from('users').insert({
       username: lowerUsername, password: hashedPassword, full_name, role, role_id,
       department_id: department_id || null,
-      branch_id: branch_id || null
+      branch_id: branch_id || (currentUser.role === 'ADMIN' ? currentUser.branch_id : null)
     }).select('id').single();
 
     if (error) throw error;
@@ -260,8 +287,15 @@ app.get("/api/departments", authenticate, async (req, res) => {
   const user = (req as any).user;
   let query = supabase.from('departments').select('*, branches(name)');
 
-  if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
-    query = query.eq('branch_id', user.branch_id);
+  if (user.role !== 'SUPER_ADMIN') {
+    if (user.role === 'ADMIN' && user.branch_id) {
+      query = query.eq('branch_id', user.branch_id);
+    } else if (user.role === 'USER' && user.department_id) {
+      query = query.eq('id', user.department_id);
+    } else if (!user.branch_id && !user.department_id) {
+      // Fallback or specific restriction
+      return res.json([]);
+    }
   }
 
   const { data } = await query;
@@ -273,17 +307,55 @@ app.get("/api/departments", authenticate, async (req, res) => {
 });
 app.post("/api/departments", authenticate, async (req, res) => {
   const { name, branch_id } = req.body;
-  const { data, error } = await supabase.from('departments').insert({ name, branch_id: branch_id || null }).select('*').single();
+  const user = (req as any).user;
+
+  if (user.role === 'ADMIN') {
+    if (branch_id && parseInt(branch_id) !== user.branch_id) {
+      return res.status(403).json({ error: "Không có quyền tạo bộ phận cho chi nhánh khác" });
+    }
+  } else if (user.role === 'USER') {
+    return res.status(403).json({ error: "Bạn không có quyền quản lý bộ phận" });
+  }
+
+  const { data, error } = await supabase.from('departments').insert({ 
+      name, 
+      branch_id: user.role === 'ADMIN' ? user.branch_id : (branch_id || null) 
+  }).select('*').single();
+
   if (error) return res.status(400).json({ error: "Bộ phận đã tồn tại hoặc dữ liệu không hợp lệ" });
   res.json(data);
 });
 app.put("/api/departments/:id", authenticate, async (req, res) => {
   const { name, branch_id } = req.body;
-  await supabase.from('departments').update({ name, branch_id: branch_id || null }).eq('id', req.params.id);
+  const user = (req as any).user;
+  const { id } = req.params;
+
+  const { data: existing } = await supabase.from('departments').select('branch_id').eq('id', id).single();
+  if (!existing) return res.status(404).json({ error: "Bộ phận không tồn tại" });
+
+  if (user.role === 'ADMIN') {
+    if (existing.branch_id !== user.branch_id) return res.status(403).json({ error: "Không có quyền sửa bộ phận này" });
+    if (branch_id && parseInt(branch_id) !== user.branch_id) return res.status(403).json({ error: "Không thể chuyển bộ phận sang chi nhánh khác" });
+  } else if (user.role === 'USER') {
+    return res.status(403).json({ error: "Bạn không có quyền sửa bộ phận" });
+  }
+
+  await supabase.from('departments').update({ name, branch_id: branch_id || null }).eq('id', id);
   res.json({ success: true });
 });
 app.delete("/api/departments/:id", authenticate, async (req, res) => {
-  await supabase.from('departments').delete().eq('id', req.params.id);
+  const user = (req as any).user;
+  const { id } = req.params;
+
+  const { data: existing } = await supabase.from('departments').select('branch_id').eq('id', id).single();
+  if (!existing) return res.status(404).json({ error: "Bộ phận không tồn tại" });
+
+  if (user.role !== 'SUPER_ADMIN') {
+    if (user.role === 'ADMIN' && existing.branch_id !== user.branch_id) return res.status(403).json({ error: "Không có quyền xóa bộ phận này" });
+    if (user.role === 'USER') return res.status(403).json({ error: "Bạn không có quyền xóa bộ phận" });
+  }
+
+  await supabase.from('departments').delete().eq('id', id);
   res.json({ success: true });
 });
 
@@ -292,14 +364,16 @@ app.get("/api/reasons", authenticate, async (req, res) => {
   let query = supabase.from('star_reasons')
     .select('id, stars, reason_text, created_by, department_id, departments(name, branch_id), created_by_user:users!star_reasons_created_by_fkey(full_name)');
 
-  if (user.role === 'ADMIN') {
-    if (user.branch_id) {
-      query = query.or(`department_id.is.null,departments.branch_id.eq.${user.branch_id}`);
+  if (user.role?.toUpperCase() === 'ADMIN' && user.branch_id) {
+    const { data: bDepts } = await supabase.from('departments').select('id').eq('branch_id', user.branch_id);
+    const dIds = bDepts?.map((d: any) => d.id) || [];
+    if (dIds.length > 0) {
+      query = query.or(`department_id.is.null,department_id.in.(${dIds.join(',')})`);
+    } else {
+      query = query.is('department_id', null);
     }
-  } else if (user.role === 'USER') {
-    if (user.department_id) {
-      query = query.or(`department_id.is.null,department_id.eq.${user.department_id}`);
-    }
+  } else if (user.role?.toUpperCase() === 'USER' && user.department_id) {
+    query = query.or(`department_id.is.null,department_id.eq.${user.department_id}`);
   }
 
   const { data } = await query;
@@ -315,164 +389,165 @@ app.post("/api/reasons", authenticate, async (req, res) => {
   const user = (req as any).user;
   
   let final_department_id = department_id || null;
+  if (user.role === 'ADMIN') {
+    // Branch admin must pick a department in their branch
+     if (!final_department_id) {
+         return res.status(400).json({ error: "Quản trị viên chi nhánh phải chọn một bộ phận cụ thể" });
+     }
+     const { data: dept } = await supabase.from('departments').select('branch_id').eq('id', final_department_id).single();
+     if (!dept || dept.branch_id != user.branch_id) {
+         return res.status(403).json({ error: "Bộ phận không thuộc chi nhánh của bạn" });
+     }
+  } else if (user.role === 'USER') {
+     if (user.department_id) {
+         final_department_id = user.department_id;
+     } else {
+         return res.status(403).json({ error: "Người dùng phải thuộc về một bộ phận" });
+     }
+  }
+
   const { data: insertedData, error } = await supabase.from('star_reasons').insert({
     stars, reason_text, created_by: user.id, department_id: final_department_id
   }).select('*, departments(name)').single();
   
-  if (error) return res.status(400).json({ error: "Lỗi khi thêm lý do" });
+  if (error) {
+    console.error("Error creating reason:", error);
+    return res.status(400).json({ error: "Lỗi khi thêm lý do: " + error.message });
+  }
   
   const { data: creator } = await supabase.from('users').select('full_name').eq('id', user.id).single();
-  res.json({
+  
+  const newReason = {
     ...insertedData,
     department_name: (insertedData as any).departments?.name,
     created_by_name: creator?.full_name || user.full_name
-  });
+  };
+  res.json(newReason);
 });
 app.put("/api/reasons/:id", authenticate, async (req, res) => {
   const user = (req as any).user;
   const { id } = req.params;
-  const { stars, reason_text } = req.body;
+  const { stars, reason_text, department_id } = req.body;
 
-  const { data: reason } = await supabase.from('star_reasons').select('created_by, department_id, departments(branch_id)').eq('id', id).single();
+  const { data: reason } = await supabase.from('star_reasons')
+    .select('created_by, department_id, departments(branch_id)')
+    .eq('id', parseInt(id))
+    .single();
+    
   if (!reason) return res.status(404).json({ error: "Lý do không tồn tại" });
   
   let canEdit = user.role === 'SUPER_ADMIN' || user.permissions?.includes('reasons:edit') || reason.created_by === user.id;
 
   if (user.role === 'ADMIN') {
-    if ((reason as any).departments?.branch_id !== user.branch_id) canEdit = false;
+    if ((reason as any).departments?.branch_id != user.branch_id) canEdit = false;
   } else if (user.role === 'USER') {
-    // Users cannot edit global reasons (department_id is null) or reasons from other departments
-    if (reason.department_id === null || reason.department_id !== user.department_id) canEdit = false;
+    if (reason.department_id != user.department_id) canEdit = false;
   }
 
   if (!canEdit) {
     return res.status(403).json({ error: "Bạn không có quyền sửa lý do này" });
   }
 
-  await supabase.from('star_reasons').update({ stars, reason_text }).eq('id', id);
+  let final_department_id = department_id || null;
+  if (user.role === 'ADMIN') {
+     if (!final_department_id) return res.status(400).json({ error: "Phải chọn bộ phận" });
+     const { data: d } = await supabase.from('departments').select('branch_id').eq('id', final_department_id).single();
+     if (!d || d.branch_id != user.branch_id) return res.status(403).json({ error: "Bộ phận không hợp lệ" });
+  } else if (user.role === 'USER') {
+     final_department_id = user.department_id;
+  }
+
+  const { error: updateError } = await supabase.from('star_reasons')
+    .update({ stars, reason_text, department_id: final_department_id })
+    .eq('id', parseInt(id));
+    
+  if (updateError) {
+    console.error("Error updating reason:", updateError);
+    return res.status(400).json({ error: "Lỗi khi cập nhật lý do: " + updateError.message });
+  }
   res.json({ success: true });
 });
 app.delete("/api/reasons/:id", authenticate, async (req, res) => {
   const user = (req as any).user;
   const { id } = req.params;
 
-  const { data: reason } = await supabase.from('star_reasons').select('created_by, department_id, departments(branch_id)').eq('id', id).single();
+  const { data: reason } = await supabase.from('star_reasons').select('created_by, department_id, departments(branch_id)').eq('id', parseInt(id)).single();
   if (!reason) return res.status(404).json({ error: "Lý do không tồn tại" });
-
+  
   let canDelete = user.role === 'SUPER_ADMIN' || user.permissions?.includes('reasons:delete') || reason.created_by === user.id;
 
   if (user.role === 'ADMIN') {
-    if ((reason as any).departments?.branch_id !== user.branch_id) canDelete = false;
+    if ((reason as any).departments?.branch_id != user.branch_id) canDelete = false;
   } else if (user.role === 'USER') {
     // Users cannot delete global reasons (department_id is null) or reasons from other departments
-    if (reason.department_id === null || reason.department_id !== user.department_id) canDelete = false;
+    if (reason.department_id == null || reason.department_id != user.department_id) canDelete = false;
   }
 
   if (!canDelete) {
     return res.status(403).json({ error: "Bạn không có quyền xóa lý do này" });
   }
 
-  await supabase.from('star_reasons').delete().eq('id', id);
+  const { error: deleteError } = await supabase.from('star_reasons').delete().eq('id', parseInt(id));
+  if (deleteError) {
+    console.error("Error deleting reason:", deleteError);
+    return res.status(400).json({ error: "Lỗi khi xóa lý do: " + deleteError.message });
+  }
   res.json({ success: true });
 });
 
 app.get("/api/employees", authenticate, async (req, res) => {
   const user = (req as any).user;
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
+  try {
+    let p_branch_id = null;
+    let p_dept_id = null;
+    if (user.role && user.role.toUpperCase() !== 'SUPER_ADMIN' && user.branch_id) {
+      p_branch_id = parseInt(user.branch_id as any) || null;
+    }
+    if (user.role && user.role.toUpperCase() === 'USER' && user.department_id) {
+      p_dept_id = parseInt(user.department_id as any) || null;
+    }
 
-  const startOfMonth = `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`;
-  const startOfYear = `${currentYear}-01-01`;
-  const startOfAllTime = `2020-01-01`;
+    const { data: rows, error } = await supabase.rpc('get_employees_dashboard_stats', { 
+      p_branch_id, 
+      p_dept_id,
+      p_is_resigned: null 
+    });
 
-  const nextMonth = new Date(currentYear, currentMonth, 1);
-  const lastDayOfMonth = new Date(nextMonth.getTime() - 1);
-  const endOfMonth = lastDayOfMonth.toISOString().split('T')[0];
-  const endOfYear = `${currentYear}-12-31`;
+    console.log(`[API /employees] Request by role=${user.role}, branch=${p_branch_id}, dept=${p_dept_id} -> returned ${rows?.length || 0} rows. Error: ${error?.message}`);
 
-  const monthStartObj = new Date(startOfMonth);
-  const monthEndObj = todayStr > endOfMonth ? new Date(endOfMonth) : new Date(todayStr);
-  const monthDiffDays = Math.ceil((monthEndObj.getTime() - monthStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    if (error) {
+      console.error("RPC Error:", error);
+      return res.status(500).json({ error: "Lỗi hệ thống khi lấy danh sách nhân viên" });
+    }
 
-  const yearStartObj = new Date(startOfYear);
-  const yearEndObj = todayStr > endOfYear ? new Date(endOfYear) : new Date(todayStr);
-  const yearDiffDays = Math.ceil((yearEndObj.getTime() - yearStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-  const allTimeStartObj = new Date(startOfAllTime);
-  const allTimeEndObj = todayStr > endOfYear ? new Date(endOfYear) : new Date(todayStr);
-  const allTimeDiffDays = Math.ceil((allTimeEndObj.getTime() - allTimeStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-  let query = supabase.from('employees').select(`
-    id, employee_code, full_name, email, department_id, branch_id, cccd, is_resigned, created_at, updated_at,
-    departments(name), branches(name),
-    created_by_user:users!employees_created_by_fkey(full_name),
-    updated_by_user:users!employees_updated_by_fkey(full_name)
-  `);
-
-  if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
-    query = query.eq('branch_id', user.branch_id);
+    res.json(rows || []);
+  } catch (err) {
+    res.status(500).json({ error: "Lỗi lấy danh sách nhân viên" });
   }
-  if (user.role === 'USER' && user.department_id) {
-    query = query.eq('department_id', user.department_id);
-  }
-
-  const { data: employees, error: eErr } = await query;
-  if (eErr) return res.status(500).json({ error: "Lỗi hệ thống" });
-
-  // Fetch all evaluations for these employees
-  const empIds = employees.map(e => e.id);
-  const { data: evals, error: evErr } = await supabase.from('evaluations')
-    .select('employee_id, stars, date')
-    .in('employee_id', empIds)
-    .gte('date', startOfAllTime)
-    .lte('date', endOfYear);
-
-  const evaluationData = evals || [];
-
-  const rows = employees.map((e: any) => {
-    const empEvals = evaluationData.filter(ev => ev.employee_id === e.id);
-
-    // Month stars
-    const monthDelta = empEvals.filter(ev => ev.date >= startOfMonth && ev.date <= endOfMonth).reduce((a, c) => a + (c.stars - 3), 0);
-    const monthDays = getEmpDiffDays(e.created_at, monthStartObj, monthEndObj, monthDiffDays);
-    const monthStars = monthDays * 3 + monthDelta;
-
-    // Year stars
-    const yearDelta = empEvals.filter(ev => ev.date >= startOfYear && ev.date <= endOfYear).reduce((a, c) => a + (c.stars - 3), 0);
-    const yearDays = getEmpDiffDays(e.created_at, yearStartObj, yearEndObj, yearDiffDays);
-    const yearStars = yearDays * 3 + yearDelta;
-
-    // All Time stars
-    const allTimeDelta = empEvals.reduce((a, c) => a + (c.stars - 3), 0);
-    const allTimeDays = getEmpDiffDays(e.created_at, allTimeStartObj, allTimeEndObj, allTimeDiffDays);
-    const allTimeStars = allTimeDays * 3 + allTimeDelta;
-
-    return {
-      ...e,
-      department_name: e.departments?.name,
-      branch_name: e.branches?.name,
-      created_by_name: (e as any).created_by_user?.full_name,
-      updated_by_name: (e as any).updated_by_user?.full_name,
-      stars_month: monthStars,
-      stars_year: yearStars,
-      stars_all_time: allTimeStars
-    };
-  });
-  res.json(rows);
 });
 
 app.post("/api/employees", authenticate, async (req, res) => {
   const { employee_code, full_name, email, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
   const user = (req as any).user;
+
+  // RBAC validation
+  if (user.role === 'ADMIN') {
+    if (branch_id && branch_id != user.branch_id) return res.status(403).json({ error: "Không thể tạo nhân viên cho chi nhánh khác" });
+    const { data: dept } = await supabase.from('departments').select('branch_id').eq('id', department_id).single();
+    if (!dept || dept.branch_id != user.branch_id) return res.status(403).json({ error: "Bộ phận không thuộc chi nhánh của bạn" });
+  } else if (user.role === 'USER') {
+    if (department_id && department_id != user.department_id) return res.status(403).json({ error: "Bạn chỉ có quyền tạo nhân viên trong bộ phận của mình" });
+  }
+
   const { data, error } = await supabase.from('employees').insert({
-    employee_code, full_name, email, department_id, branch_id, cccd,
+    employee_code, full_name, email, department_id, 
+    branch_id: user.role === 'ADMIN' ? user.branch_id : (branch_id || (user.role === 'USER' ? user.branch_id : null)), 
+    cccd,
     is_resigned: is_resigned ? true : false,
     created_by: user.id,
     created_at: created_at ? new Date(created_at).toISOString() : new Date().toISOString()
   }).select('id').single();
-  if (error) return res.status(400).json({ error: "Lỗi khi thêm nhân viên" });
+  if (error) return res.status(400).json({ error: "Lỗi khi thêm nhân viên: " + error.message });
   res.json({ id: data.id });
 });
 
@@ -502,6 +577,24 @@ app.post("/api/employees/import", authenticate, async (req, res) => {
 app.put("/api/employees/:id", authenticate, async (req, res) => {
   const { employee_code, full_name, email, department_id, branch_id, cccd, is_resigned, created_at } = req.body;
   const user = (req as any).user;
+  const { id } = req.params;
+
+  const { data: existing } = await supabase.from('employees').select('branch_id, department_id').eq('id', id).single();
+  if (!existing) return res.status(404).json({ error: "Nhân viên không tồn tại" });
+
+  // RBAC Check
+  if (user.role === 'ADMIN') {
+    if (existing.branch_id != user.branch_id) return res.status(403).json({ error: "Không có quyền sửa nhân viên của chi nhánh khác" });
+    if (branch_id && branch_id != user.branch_id) return res.status(403).json({ error: "Không thể chuyển nhân viên sang chi nhánh khác" });
+    if (department_id) {
+      const { data: dept } = await supabase.from('departments').select('branch_id').eq('id', department_id).single();
+      if (!dept || dept.branch_id != user.branch_id) return res.status(403).json({ error: "Bộ phận đích không thuộc chi nhánh của bạn" });
+    }
+  } else if (user.role === 'USER') {
+    if (existing.department_id != user.department_id) return res.status(403).json({ error: "Không có quyền sửa nhân viên bộ phận này" });
+    if (department_id && parseInt(department_id) !== user.department_id) return res.status(403).json({ error: "Không thể chuyển nhân viên sang bộ phận khác" });
+  }
+
   const updateData: any = {
     employee_code, full_name, email, department_id, branch_id, cccd,
     is_resigned: is_resigned ? true : false,
@@ -511,13 +604,27 @@ app.put("/api/employees/:id", authenticate, async (req, res) => {
   if (created_at) {
     updateData.created_at = new Date(created_at).toISOString();
   }
-  const { error } = await supabase.from('employees').update(updateData).eq('id', req.params.id);
-  if (error) return res.status(400).json({ error: "Lỗi khi cập nhật" });
-  res.json({ success: true });
+  try {
+    const { error } = await supabase.from('employees').update(updateData).eq('id', id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Lỗi /api/employees/:id PUT:", err);
+    res.status(400).json({ error: "Lỗi khi cập nhật nhân viên" });
+  }
 });
 
 app.delete("/api/employees/:id", authenticate, async (req, res) => {
-  await supabase.from('employees').delete().eq('id', req.params.id);
+  const user = (req as any).user;
+  const { id } = req.params;
+
+  const { data: existing } = await supabase.from('employees').select('branch_id, department_id').eq('id', id).single();
+  if (!existing) return res.status(404).json({ error: "Nhân viên không tồn tại" });
+
+  if (user.role === 'ADMIN' && existing.branch_id != user.branch_id) return res.status(403).json({ error: "Không có quyền xóa nhân viên chi nhánh khác" });
+  if (user.role === 'USER' && existing.department_id != user.department_id) return res.status(403).json({ error: "Không có quyền xóa nhân viên bộ phận khác" });
+
+  await supabase.from('employees').delete().eq('id', id);
   res.json({ success: true });
 });
 
@@ -573,7 +680,8 @@ app.get("/api/evaluations", authenticate, async (req, res) => {
         stars: ev?.stars || null,
         date: ev?.date || null,
         reason_ids: ev?.evaluation_reasons_junction?.map((r: any) => r.reason_id) || [],
-        note: ev?.note || ""
+        note: ev?.note || "",
+        department_id: emp.department_id
       };
     });
     res.json(processedRows);
@@ -585,13 +693,17 @@ app.get("/api/evaluations", authenticate, async (req, res) => {
 app.post("/api/evaluations", authenticate, async (req, res) => {
   const { employee_id, date, stars, reason_ids, note } = req.body;
   const evaluator_id = (req as any).user.id;
+  console.log("Saving evaluation:", { employee_id, date, stars, reason_ids });
   try {
     const updateObj = { employee_id, date, stars, evaluator_id, note };
     const { data: evData, error: evError } = await supabase.from('evaluations')
       .upsert(updateObj, { onConflict: 'employee_id,date' })
       .select('id');
 
-    if (evError) throw evError;
+    if (evError) {
+      console.error("Supabase upsert error:", evError);
+      throw evError;
+    }
 
     const firstId = evData && evData.length > 0 ? evData[0].id : null;
     if (!firstId) throw new Error("Could not get evaluation ID after upsert");
@@ -604,153 +716,92 @@ app.post("/api/evaluations", authenticate, async (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
+    console.error("Lỗi /api/evaluations POST:", err);
     res.status(500).json({ error: "Lỗi khi lưu đánh giá" });
   }
 });
-
-function getEmpDiffDays(created_at: string | null | undefined, filterStart: Date, filterEnd: Date, globalDiffDays: number) {
-  if (!created_at) {
-    // Nếu không có ngày gia nhập, chỉ tính từ ngày hôm nay (mặc định 1 ngày)
-    return 1;
-  }
-  const createdDate = new Date(created_at);
-  createdDate.setHours(0, 0, 0, 0);
-
-  const filterStartClean = new Date(filterStart);
-  filterStartClean.setHours(0, 0, 0, 0);
-  const filterEndClean = new Date(filterEnd);
-  filterEndClean.setHours(0, 0, 0, 0);
-
-  // Ngày bắt đầu tính điểm thực tế là ngày muộn nhất giữa ngày gia nhập và ngày bắt đầu bộ lọc
-  const effectiveEmpStart = createdDate > filterStartClean ? createdDate : filterStartClean;
-
-  // Nếu ngày gia nhập muộn hơn cả ngày kết thúc bộ lọc (ví dụ lọc tháng 1 nhưng nhân viên vào tháng 3)
-  if (effectiveEmpStart > filterEndClean) {
-    return 0;
-  }
-
-  return Math.ceil(Math.abs(filterEndClean.getTime() - effectiveEmpStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-}
 
 app.get("/api/summary", authenticate, async (req, res) => {
   const { startDate, endDate } = req.query;
   const user = (req as any).user;
   try {
     if (!startDate || !endDate) return res.status(400).json({ error: "Thiếu ngày bắt đầu hoặc kết thúc" });
-    const start = new Date(startDate as string);
-    const effectiveEndDateStr = (endDate as string) > new Date().toISOString().split('T')[0] ? new Date().toISOString().split('T')[0] : (endDate as string);
-    const effectiveEnd = new Date(effectiveEndDateStr);
-
-    let diffDays = 0;
-    if (effectiveEnd >= start) {
-      const diffTime = Math.abs(effectiveEnd.getTime() - start.getTime());
-      diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    
+    let p_branch_id = null;
+    let p_dept_id = null;
+    if (user.role && user.role.toUpperCase() !== 'SUPER_ADMIN' && user.branch_id) {
+      p_branch_id = parseInt(user.branch_id as any) || null;
+    }
+    if (user.role && user.role.toUpperCase() === 'USER' && user.department_id) {
+      p_dept_id = parseInt(user.department_id as any) || null;
     }
 
-    let q = supabase.from('employees').select(`
-      id, employee_code, full_name, branch_id, department_id, created_at,
-      departments(name), branches(name)
-    `).eq('is_resigned', false);
-
-    if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
-      q = q.eq('branch_id', user.branch_id);
-    }
-    if (user.role === 'USER' && user.department_id) {
-      q = q.eq('department_id', user.department_id);
-    }
-
-    const { data: employees, error } = await q;
-    if (error) throw error;
-
-    let evals: any[] = [];
-    if (employees && employees.length > 0) {
-      const empIds = employees.map((e: any) => e.id);
-
-      // Batch employee IDs into chunks if there are too many, but Supabase limit is usually high enough for .in()
-      // We will perform a single query for evaluations
-      const { data: evData } = await supabase.from('evaluations')
-        .select('employee_id, stars')
-        .in('employee_id', empIds)
-        .gte('date', startDate)
-        .lte('date', effectiveEndDateStr);
-
-      evals = evData || [];
-    }
-
-    const rows = (employees || []).map((emp: any) => {
-      const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
-      const delta = evalsInRange.reduce((acc: number, cur: any) => acc + (cur.stars - 3), 0);
-      const empDiffDays = getEmpDiffDays(emp.created_at, start, effectiveEnd, diffDays);
-      return {
-        id: emp.id,
-        employee_code: emp.employee_code,
-        full_name: emp.full_name,
-        department_name: emp.departments?.name,
-        branch_name: emp.branches?.name,
-        total_stars: empDiffDays * 3 + delta,
-        days_evaluated: empDiffDays
-      };
+    const { data: rows, error } = await supabase.rpc('get_employee_stars_summary', {
+      p_start_date: startDate,
+      p_end_date: endDate,
+      p_branch_id,
+      p_dept_id,
+      p_employee_id: null,
+      p_is_resigned: false
     });
-    res.json(rows);
+
+    if (error) {
+      console.error("Summary RPC Error:", error);
+      throw error;
+    }
+    res.json(rows || []);
+
   } catch (err) { res.status(500).json({ error: "Lỗi báo cáo tổng hợp" }); }
 });
 
 app.get("/api/summary/departments", authenticate, async (req, res) => {
   const { startDate, endDate } = req.query;
+  const user = (req as any).user;
   try {
-    const start = new Date(startDate as string);
-    const effectiveEndDateStr = (endDate as string) > new Date().toISOString().split('T')[0] ? new Date().toISOString().split('T')[0] : (endDate as string);
-    const effectiveEnd = new Date(effectiveEndDateStr);
-    let diffDays = 0;
-    if (effectiveEnd >= start) {
-      diffDays = Math.ceil(Math.abs(effectiveEnd.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    if (!startDate || !endDate) return res.status(400).json({ error: "Thiếu ngày bắt đầu hoặc kết thúc" });
+
+    let p_branch_id = null;
+    let p_dept_id = null;
+    if (user.role && user.role.toUpperCase() !== 'SUPER_ADMIN' && user.branch_id) {
+      p_branch_id = parseInt(user.branch_id as any) || null;
+    }
+    if (user.role && user.role.toUpperCase() === 'USER' && user.department_id) {
+      p_dept_id = parseInt(user.department_id as any) || null;
     }
 
-    const user = (req as any).user;
-    let query = supabase.from('departments').select('id, name, branch_id, employees(id, is_resigned, created_at)');
+    const { data: employees, error } = await supabase.rpc('get_employee_stars_summary', {
+      p_start_date: startDate,
+      p_end_date: endDate,
+      p_branch_id,
+      p_dept_id,
+      p_employee_id: null,
+      p_is_resigned: false
+    });
 
-    if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
-      query = query.eq('branch_id', user.branch_id);
-    }
-    if (user.role === 'USER' && user.department_id) {
-      query = query.eq('id', user.department_id);
-    }
-
-    const { data, error } = await query;
     if (error) throw error;
 
-    const allEmpIds: number[] = [];
-    data.forEach((dept: any) => {
-      const activeEmps = (dept.employees || []).filter((e: any) => !e.is_resigned);
-      activeEmps.forEach((e: any) => allEmpIds.push(e.id));
+    const deptMap: Record<number, { id: number, department_name: string, total_employees: number, total_stars: number }> = {};
+    
+    (employees || []).forEach((emp: any) => {
+      if (!emp.department_id) return;
+      if (!deptMap[emp.department_id]) {
+        deptMap[emp.department_id] = { id: emp.department_id, department_name: emp.department_name, total_employees: 0, total_stars: 0 };
+      }
+      deptMap[emp.department_id].total_employees += 1;
+      deptMap[emp.department_id].total_stars += emp.total_stars;
     });
 
-    let evals: any[] = [];
-    if (allEmpIds.length > 0) {
-      const { data: evData } = await supabase.from('evaluations')
-        .select('employee_id, stars')
-        .in('employee_id', allEmpIds)
-        .gte('date', startDate)
-        .lte('date', effectiveEndDateStr);
-      evals = evData || [];
-    }
-
-    const rows = data.map((dept: any) => {
-      const activeEmps = (dept.employees || []).filter((e: any) => !e.is_resigned);
-      let totalStars = 0;
-      activeEmps.forEach((emp: any) => {
-        const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
-        const delta = evalsInRange.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-        const empDays = getEmpDiffDays(emp.created_at, start, effectiveEnd, diffDays);
-        totalStars += (empDays * 3 + delta);
-      });
-      return {
-        id: dept.id,
-        department_name: dept.name,
-        total_employees: activeEmps.length,
-        total_stars: totalStars
-      };
+    let dQuery = supabase.from('departments').select('id, name');
+    if (p_branch_id) dQuery = dQuery.eq('branch_id', p_branch_id);
+    if (p_dept_id) dQuery = dQuery.eq('id', p_dept_id);
+    
+    const { data: allDepts } = await dQuery;
+    
+    const rows = (allDepts || []).map(d => {
+      if (deptMap[d.id]) return deptMap[d.id];
+      return { id: d.id, department_name: d.name, total_employees: 0, total_stars: 0 };
     });
+
     res.json(rows);
   } catch (err) { res.status(500).json({ error: "Lỗi báo cáo bộ phận" }); }
 });
@@ -758,51 +809,31 @@ app.get("/api/summary/departments", authenticate, async (req, res) => {
 app.get("/api/reports/department/:id", authenticate, async (req, res) => {
   const { startDate, endDate } = req.query;
   const department_id = req.params.id;
+  const user = (req as any).user;
   try {
-    const effectiveEndDateStr = (endDate as string) > new Date().toISOString().split('T')[0] ? new Date().toISOString().split('T')[0] : (endDate as string);
-    const start = new Date(startDate as string);
-    const effectiveEnd = new Date(effectiveEndDateStr);
-    let diffDays = Math.ceil(Math.abs(effectiveEnd.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-    const user = (req as any).user;
     const { data: dept } = await supabase.from('departments').select('*').eq('id', department_id).single();
     if (!dept) return res.status(404).json({ error: "Phòng ban không tồn tại" });
 
-    // Authorization Check
     if (user.role !== 'SUPER_ADMIN') {
-      if (user.branch_id && dept.branch_id !== user.branch_id) return res.status(403).json({ error: "Không có quyền xem bộ phận này" });
-      if (user.role === 'USER' && user.department_id && dept.id !== user.department_id) return res.status(403).json({ error: "Không có quyền xem bộ phận này" });
+      if (user.branch_id && dept.branch_id != user.branch_id) return res.status(403).json({ error: "Không có quyền xem bộ phận này" });
+      if (user.role === 'USER' && user.department_id && dept.id != user.department_id) return res.status(403).json({ error: "Không có quyền xem bộ phận này" });
     }
 
-    const { data: emps } = await supabase.from('employees')
-      .select('id, employee_code, full_name, created_at')
-      .eq('department_id', department_id).eq('is_resigned', false);
+    console.log(`[API /reports/department] role=${user.role}, branch=${user.branch_id}, accessing dept=${department_id}`);
 
-    let evals: any[] = [];
-    if (emps && emps.length > 0) {
-      const empIds = emps.map((e: any) => e.id);
-      const { data: evData } = await supabase.from('evaluations')
-        .select('employee_id, stars')
-        .in('employee_id', empIds)
-        .gte('date', startDate)
-        .lte('date', effectiveEndDateStr);
-      evals = evData || [];
-    }
-
-    const empRows = (emps || []).map((emp: any) => {
-      const evalsInRange = evals.filter((e: any) => e.employee_id === emp.id);
-      const delta = evalsInRange.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-      const empDiffDays = getEmpDiffDays(emp.created_at, start, effectiveEnd, diffDays);
-      return {
-        id: emp.id,
-        employee_code: emp.employee_code,
-        full_name: emp.full_name,
-        total_stars: empDiffDays * 3 + delta,
-        days_evaluated: empDiffDays
-      };
+    const { data: employees, error } = await supabase.rpc('get_employee_stars_summary', {
+      p_start_date: startDate,
+      p_end_date: endDate,
+      p_branch_id: null,
+      p_dept_id: parseInt(department_id),
+      p_employee_id: null,
+      p_is_resigned: false
     });
-    res.json({ department: dept, employees: empRows });
-  } catch (err) { res.status(500).json({ error: "Lỗi chi tiết phòng ban" }); }
+
+    if (error) throw error;
+
+    res.json({ department: dept, employees: employees || [] });
+  } catch (err) { res.status(500).json({ error: "Lỗi chi tiết phòng ban: " + (err as any).message }); }
 });
 
 app.get("/api/reports/employee/:id", authenticate, async (req, res) => {
@@ -857,116 +888,54 @@ app.get("/api/reports/employee/:id", authenticate, async (req, res) => {
 app.get("/api/dashboard/overview", authenticate, async (req, res) => {
   try {
     const user = (req as any).user;
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
 
-    // We fetch everything and process in JS since sqlite/supabase aggregations can be tricky with auth filters if not using views.
-    let qEmps = supabase.from('employees')
-      .select('id, full_name, branch_id, department_id, created_at, branches(name), departments(name)')
-      .eq('is_resigned', false);
-
-    if (user.role !== 'SUPER_ADMIN' && user.branch_id) {
-      qEmps = qEmps.eq('branch_id', user.branch_id);
+    let p_branch_id = null;
+    let p_dept_id = null;
+    if (user.role && user.role.toUpperCase() !== 'SUPER_ADMIN' && user.branch_id) {
+      p_branch_id = parseInt(user.branch_id as any) || null;
     }
-    if (user.role === 'USER' && user.department_id) {
-      qEmps = qEmps.eq('department_id', user.department_id);
+    if (user.role && user.role.toUpperCase() === 'USER' && user.department_id) {
+      p_dept_id = parseInt(user.department_id as any) || null;
     }
 
-    const { data: employees, error: eErr } = await qEmps;
+    const { data: employees, error: eErr } = await supabase.rpc('get_employees_dashboard_stats', { 
+      p_branch_id, 
+      p_dept_id,
+      p_is_resigned: false 
+    });
+
+    console.log(`[API /dashboard] Request by role=${user.role}, branch=${p_branch_id}, dept=${p_dept_id} -> returned ${employees?.length || 0} rows. Error: ${eErr?.message}`);
+
     if (eErr) throw eErr;
 
     const total_employees = employees?.length || 0;
 
-    // Direct counts for KPI cards (not inferred from employees)
     let bQuery = supabase.from('branches').select('*', { count: 'exact', head: true });
-    if (user.role !== 'SUPER_ADMIN' && user.branch_id) bQuery = bQuery.eq('id', user.branch_id);
+    if (p_branch_id) bQuery = bQuery.eq('id', p_branch_id);
     const { count: total_branches } = await bQuery;
 
     let dQuery = supabase.from('departments').select('*', { count: 'exact', head: true });
-    if (user.role !== 'SUPER_ADMIN' && user.branch_id) dQuery = dQuery.eq('branch_id', user.branch_id);
-    if (user.role === 'USER' && user.department_id) dQuery = dQuery.eq('id', user.department_id);
+    if (p_branch_id) dQuery = dQuery.eq('branch_id', p_branch_id);
+    if (p_dept_id) dQuery = dQuery.eq('id', p_dept_id);
     const { count: total_departments } = await dQuery;
 
-    // Breakdown (employee per branch/dept) - keeping this logic for the charts/lists
     const branchBreakdown: Record<string, number> = {};
     const deptBreakdown: Record<string, number> = {};
 
     employees?.forEach((e: any) => {
       if (e.branch_id) {
-        const bName = e.branches?.name || 'Chưa xếp nhánh';
+        const bName = e.branch_name || 'Chưa xếp nhánh';
         branchBreakdown[bName] = (branchBreakdown[bName] || 0) + 1;
       }
       if (e.department_id) {
-        const dName = e.departments?.name || 'Chưa xếp phòng';
+        const dName = e.department_name || 'Chưa xếp phòng';
         deptBreakdown[dName] = (deptBreakdown[dName] || 0) + 1;
       }
     });
 
-    // Definitions for time ranges
-    const startOfYear = `${currentYear}-01-01`;
-    const endOfYear = `${currentYear}-12-31`;
-    const startOfMonth = `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`;
-    const startOfAllTime = `2020-01-01`; // Safe lower bound
-
-    // Determine the last day of the current month
-    const nextMonth = new Date(currentYear, currentMonth, 1);
-    const lastDayOfMonth = new Date(nextMonth.getTime() - 1);
-    const endOfMonth = lastDayOfMonth.toISOString().split('T')[0];
-
-    let evals: any[] = [];
-    if (employees && employees.length > 0) {
-      const empIds = employees.map((e: any) => e.id);
-      const { data: evData } = await supabase.from('evaluations')
-        .select('employee_id, stars, date')
-        .in('employee_id', empIds)
-        .gte('date', startOfAllTime)
-        .lte('date', endOfYear);
-      evals = evData || [];
-    }
-
-    // Calculate diff days
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    // All time
-    const allTimeStartObj = new Date(startOfAllTime);
-    const allTimeEndObj = todayStr > endOfYear ? new Date(endOfYear) : new Date(todayStr); // should use endOfYear if we want to cap at today
-    const allTimeDiffDays = Math.ceil((allTimeEndObj.getTime() - allTimeStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-    // Year
-    const yearStartObj = new Date(startOfYear);
-    const yearEndObj = todayStr > endOfYear ? new Date(endOfYear) : new Date(todayStr);
-    const yearDiffDays = Math.ceil((yearEndObj.getTime() - yearStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-    // Month
-    const monthStartObj = new Date(startOfMonth);
-    const monthEndObj = todayStr > endOfMonth ? new Date(endOfMonth) : new Date(todayStr);
-    const monthDiffDays = Math.ceil((monthEndObj.getTime() - monthStartObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-    const empScoresAllTime = employees?.map((emp: any) => {
-      const evs = evals.filter((e: any) => e.employee_id === emp.id);
-      const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-      const empDiffDays = getEmpDiffDays(emp.created_at, allTimeStartObj, allTimeEndObj, allTimeDiffDays);
-      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDays * 3 + delta };
-    }) || [];
-
-    const empScoresYear = employees?.map((emp: any) => {
-      const evs = evals.filter((e: any) => e.employee_id === emp.id && e.date >= startOfYear && e.date <= endOfYear);
-      const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-      const empDiffDays = getEmpDiffDays(emp.created_at, yearStartObj, yearEndObj, yearDiffDays);
-      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDays * 3 + delta };
-    }) || [];
-
-    const empScoresMonth = employees?.map((emp: any) => {
-      const evs = evals.filter((e: any) => e.employee_id === emp.id && e.date >= startOfMonth && e.date <= endOfMonth);
-      const delta = evs.reduce((a: number, c: any) => a + (c.stars - 3), 0);
-      const empDiffDays = getEmpDiffDays(emp.created_at, monthStartObj, monthEndObj, monthDiffDays);
-      return { id: emp.id, name: emp.full_name, branch: emp.branches?.name, total: empDiffDays * 3 + delta };
-    }) || [];
-
-    const top_all_time = empScoresAllTime.sort((a, b) => b.total - a.total).slice(0, 3);
-    const top_year = empScoresYear.sort((a, b) => b.total - a.total).slice(0, 3);
-    const top_month = empScoresMonth.sort((a, b) => b.total - a.total).slice(0, 3);
+    const top_all_time = [...(employees || [])].sort((a, b) => b.stars_all_time - a.stars_all_time).slice(0, 3).map(e => ({ id: e.id, name: e.full_name, branch: e.branch_name, total: e.stars_all_time }));
+    const top_year = [...(employees || [])].sort((a, b) => b.stars_year - a.stars_year).slice(0, 3).map(e => ({ id: e.id, name: e.full_name, branch: e.branch_name, total: e.stars_year }));
+    const top_month = [...(employees || [])].sort((a, b) => b.stars_month - a.stars_month).slice(0, 3).map(e => ({ id: e.id, name: e.full_name, branch: e.branch_name, total: e.stars_month }));
 
     res.json({
       total_branches: total_branches || 0,
@@ -979,6 +948,7 @@ app.get("/api/dashboard/overview", authenticate, async (req, res) => {
       top_month
     });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Lỗi lấy dữ liệu tổng quan" });
   }
 });
@@ -1015,5 +985,6 @@ app.post("/api/roles/:id/permissions", authenticate, async (req, res) => {
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: "Lỗi cập nhật quyền hạn" }); }
 });
+
 
 export default app;
